@@ -18,6 +18,6 @@ class Client(Base):
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(32), nullable=False)
     ppd: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    role: Mapped[UserRoles] = mapped_column(enum_column(UserRoles, "user_roles"), nullable=False, default=UserRoles.CLIENT)
+    role: Mapped[str] = mapped_column(enum_column(UserRoles, "user_roles"), nullable=False, default=UserRoles.CLIENT.value)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
