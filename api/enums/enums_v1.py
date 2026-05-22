@@ -1,6 +1,6 @@
 from enum import Enum
 
-class ORDERS_STATES(Enum):
+class OrderStates(Enum):
 
     """
     AWAITING_PERFORMER - сделка ожидает исполнителя (З1)
@@ -9,12 +9,16 @@ class ORDERS_STATES(Enum):
     AWAITING_CLIENT_CONFIRMATION - сделка ожидает подтверждения заказчиком (З4/И4)
     AWAITING_CONFLICT - отказ заказчика требует подтверждения отказа исполнителем (З5/И5)
     OPEN_CONFLICT - открыт спор (З6/И6)
-
     """
 
-    AWAITING_PERFORMER = 'AWAITING_PERFORMER'
-    AWAITING_PAYMENT  = 'AWAITING_PAYMENT'
-    AWAITING_PERFORMER_CONFIRMATION = 'AWAITING_PERFORMER_CONFIRMATION'
-    AWAITING_CLIENT_CONFIRMATION  = 'AWAITING_CLIENT_CONFIRMATION'
-    AWAITING_CONFLICT = 'AWAITING_CONFLICT'
-    OPEN_CONFLICT = 'OPEN_CONFLICT'
+    AWAITING_PERFORMER = 'awaiting_performer'
+    AWAITING_PAYMENT  = 'awaiting_payment'
+    AWAITING_PERFORMER_CONFIRMATION = 'awaiting_performer_confirmation'
+    AWAITING_CLIENT_CONFIRMATION  = 'awaiting_client_confirmation'
+    AWAITING_CONFLICT = 'awaiting_conflict'
+    OPEN_CONFLICT = 'open_conflict'
+
+class UserRoles(Enum):
+
+    PERFORMER = 'performer'
+    CLIENT = 'client'
