@@ -1,42 +1,55 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, JSON, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base
+from api.enums.enums_v1 import NotificationStatuses, NotificationTypes
 
+from .base import Base, enum_column
 
-class NotificationType(Base):
-    """Типы уведомлений: заказ, отзыв, акция, новость"""
-    __tablename__ = "notification_types"
+if TYPE_CHECKING:
+    from .users import User
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
-
-class NotificationStatus(Base):
-    """Статусы уведомлений: отправлено, доставлено, прочитано, ошибка"""
-    __tablename__ = "notification_statuses"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
-
-class NotificationUserType(Base):
-    """Типы пользователей: клиент, исполнитель"""
-    __tablename__ = "notification_user_types"
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String(128), nullable=False)
 
 class Notification(Base):
-    """Уведомления"""
+    """Адресное уведомление пользователя."""
+
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_id", "user_id"),
+        Index("ix_notifications_status", "status"),
+        Index("ix_notifications_user_status_created_at", "user_id", "status", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    type: Mapped[NotificationTypes] = mapped_column(
+        enum_column(NotificationTypes, "notification_types"),
+        nullable=False,
+    )
+    status: Mapped[NotificationStatuses] = mapped_column(
+        enum_column(NotificationStatuses, "notification_statuses"),
+        nullable=False,
+        default=NotificationStatuses.UNREAD,
+        server_default=NotificationStatuses.UNREAD.value,
+    )
     title: Mapped[str] = mapped_column(String(128), nullable=False)
-    text: Mapped[str] = mapped_column(String, nullable=False)
-    notification_type_id: Mapped[int] = mapped_column(ForeignKey(NotificationType.id), nullable=False)
-    status: Mapped[int] = mapped_column(ForeignKey(NotificationStatus.id), nullable=False)
-    user_type_id: Mapped[int] = mapped_column(ForeignKey(NotificationUserType.id), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    user: Mapped["User"] = relationship("User", back_populates="notifications")

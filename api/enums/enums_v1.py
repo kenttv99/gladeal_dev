@@ -1,7 +1,7 @@
 from enum import Enum
 
-class OrderStates(Enum):
 
+class OrderStates(Enum):
     """
     AWAITING_PERFORMER - сделка ожидает исполнителя (З1)
     AWAITING_PAYMENT - сделка ожидает оплаты (З2/И2)
@@ -15,18 +15,36 @@ class OrderStates(Enum):
     CLOSED_BY_ARBITER_TO_PERFORMER - закрыта арбитром в пользу исполнителя (З10/И10)
     """
 
-    AWAITING_PERFORMER = 'awaiting_performer'
-    AWAITING_PAYMENT  = 'awaiting_payment'
-    AWAITING_PERFORMER_CONFIRMATION = 'awaiting_performer_confirmation'
-    AWAITING_CLIENT_CONFIRMATION  = 'awaiting_client_confirmation'
-    AWAITING_CONFLICT = 'awaiting_conflict'
-    OPEN_CONFLICT = 'open_conflict'
-    SUCCESSFUL_COMPLETION = 'successful_completion'
-    UNSUCCESSFUL_COMPLETION = 'unsuccessful_completion'
-    CLOSED_BY_ARBITER_TO_CLIENT = 'closed_by_arbiter_to_client'
-    CLOSED_BY_ARBITER_TO_PERFORMER = 'closed_by_arbiter_to_performer'
+    AWAITING_PERFORMER = "awaiting_performer"
+    AWAITING_PAYMENT = "awaiting_payment"
+    AWAITING_PERFORMER_CONFIRMATION = "awaiting_performer_confirmation"
+    AWAITING_CLIENT_CONFIRMATION = "awaiting_client_confirmation"
+    AWAITING_CONFLICT = "awaiting_conflict"
+    OPEN_CONFLICT = "open_conflict"
+    SUCCESSFUL_COMPLETION = "successful_completion"
+    UNSUCCESSFUL_COMPLETION = "unsuccessful_completion"
+    CLOSED_BY_ARBITER_TO_CLIENT = "closed_by_arbiter_to_client"
+    CLOSED_BY_ARBITER_TO_PERFORMER = "closed_by_arbiter_to_performer"
+
 
 class UserRoles(Enum):
+    PERFORMER = "performer"
+    CLIENT = "client"
 
-    PERFORMER = 'performer'
-    CLIENT = 'client'
+
+###
+# Набросок для уведомлений
+###
+
+class NotificationTypes(Enum):
+    ORDER = "order"
+    REVIEW = "review"
+    PROMOTION = "promotion"
+    NEWS = "news"
+
+
+class NotificationStatuses(Enum):
+    UNREAD = "unread"
+    READ = "read"
+    ARCHIVED = "archived"
+    FAILED = "failed"

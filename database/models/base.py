@@ -1,5 +1,5 @@
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import MetaData, Enum, DateTime
+from sqlalchemy import Enum, MetaData
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -13,6 +13,7 @@ NAMING_CONVENTION = {
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
+
 def enum_column(enum_type, name: str) -> Enum:
     return Enum(
         enum_type,
@@ -22,5 +23,4 @@ def enum_column(enum_type, name: str) -> Enum:
         validate_strings=True,
         values_callable=lambda enum_cls: [member.value for member in enum_cls],
     )
-
 
