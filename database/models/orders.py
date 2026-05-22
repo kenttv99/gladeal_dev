@@ -84,7 +84,7 @@ class Order(Base):
 
 
 class OrderStatusHistory(Base):
-    """История смены статусов сделки."""
+    """История статусов сделки"""
 
     __tablename__ = "order_status_history"
     __table_args__ = (
