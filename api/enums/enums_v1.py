@@ -9,6 +9,8 @@ class OrderStates(Enum):
     AWAITING_CLIENT_CONFIRMATION - сделка ожидает подтверждения заказчиком (З4/И4)
     AWAITING_CONFLICT - отказ заказчика требует подтверждения отказа исполнителем (З5/И5)
     OPEN_CONFLICT - открыт спор (З6/И6)
+    SUCCESSFUL_COMPLETION - успешное завершение (З7/И7)
+    UNSUCCESSFUL_COMPLETION - неуспешное завершение (З8/И8)
     """
 
     AWAITING_PERFORMER = 'awaiting_performer'
@@ -17,6 +19,8 @@ class OrderStates(Enum):
     AWAITING_CLIENT_CONFIRMATION  = 'awaiting_client_confirmation'
     AWAITING_CONFLICT = 'awaiting_conflict'
     OPEN_CONFLICT = 'open_conflict'
+    SUCCESSFUL_COMPLETION = 'successful_completion'
+    UNSUCCESSFUL_COMPLETION = 'unsuccessful_completion'
 
 class UserRoles(Enum):
 
