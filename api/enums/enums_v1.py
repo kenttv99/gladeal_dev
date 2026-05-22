@@ -11,6 +11,8 @@ class OrderStates(Enum):
     OPEN_CONFLICT - открыт спор (З6/И6)
     SUCCESSFUL_COMPLETION - успешное завершение (З7/И7)
     UNSUCCESSFUL_COMPLETION - неуспешное завершение (З8/И8)
+    CLOSED_BY_ARBITER_TO_CLIENT - закрыта арбитром в пользу клиента (З9/И9)
+    CLOSED_BY_ARBITER_TO_PERFORMER - закрыта арбитром в пользу исполнителя (З10/И10)
     """
 
     AWAITING_PERFORMER = 'awaiting_performer'
@@ -21,6 +23,8 @@ class OrderStates(Enum):
     OPEN_CONFLICT = 'open_conflict'
     SUCCESSFUL_COMPLETION = 'successful_completion'
     UNSUCCESSFUL_COMPLETION = 'unsuccessful_completion'
+    CLOSED_BY_ARBITER_TO_CLIENT = 'closed_by_arbiter_to_client'
+    CLOSED_BY_ARBITER_TO_PERFORMER = 'closed_by_arbiter_to_performer'
 
 class UserRoles(Enum):
 
