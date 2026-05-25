@@ -19,3 +19,8 @@ class AuthUserRequest(BaseModel):
 class AuthUserResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class ResetPhoneNumberRequest(BaseModel):
+    user_id: int
+    phone_number: str

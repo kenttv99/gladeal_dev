@@ -101,3 +101,27 @@ async def authenticate_user(phone_number: str) -> int:
         if user_id is None:
             raise UserNotFoundError()
         return user_id
+
+
+async def reset_phone_number(user_id: int, phone_number: str) -> None:
+    async with AsyncSessionLocal() as session:
+        try:
+            async with session.begin():
+                phone_number_owner_id = await session.scalar(
+                    select(User.id).where(User.phone_number == phone_number, User.id != user_id)
+                )
+                if phone_number_owner_id is not None:
+                    raise PhoneNumberAlreadyExistsError()
+
+                result = await session.execute(
+                    update(User)
+                    .where(User.id == user_id)
+                    .values(phone_number=phone_number)
+                    .returning(User.id)
+                )
+                if result.scalar_one_or_none() is None:
+                    raise UserNotFoundError()
+        except IntegrityError as exc:
+            if "uq_users_phone_number" in str(exc.orig):
+                raise PhoneNumberAlreadyExistsError() from exc
+            raise

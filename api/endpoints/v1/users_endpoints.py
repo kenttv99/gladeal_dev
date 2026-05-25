@@ -5,12 +5,14 @@ from api.schemas.schemas_v1 import (
     AuthUserResponse,
     DeleteAccountRequest,
     RegisterUserRequest,
+    ResetPhoneNumberRequest,
 )
 from api.utils.jwt_methods import generate_access_token
 from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
     register_user,
+    reset_phone_number as reset_phone_number_method,
 )
 
 
@@ -35,5 +37,6 @@ async def auth(user: AuthUserRequest) -> AuthUserResponse:
 
 
 @router.post("/reset-phone-number")
-async def reset_phone_number() -> None:
-    pass
+async def reset_phone_number(user: ResetPhoneNumberRequest) -> dict[str, bool]:
+    await reset_phone_number_method(user.user_id, user.phone_number)
+    return {"success": True}
