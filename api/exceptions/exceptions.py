@@ -21,6 +21,11 @@ class UserNotFoundError(BaseAPIException):
     error_code = "USER_NOT_FOUND"
 
 
+class PhoneNumberAlreadyExistsError(BaseAPIException):
+    status_code = 409
+    error_code = "PHONE_NUMBER_ALREADY_EXISTS"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"

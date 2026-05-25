@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+from api.exceptions import register_exception_handlers
+
 
 
 
@@ -19,6 +21,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+register_exception_handlers(app)
 
 # Подключаем роутеры с префиксами и тегами
 
