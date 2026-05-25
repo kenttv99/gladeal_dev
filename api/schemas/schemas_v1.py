@@ -10,3 +10,12 @@ class RegisterUserRequest(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     user_id: int
+
+
+class AuthUserRequest(BaseModel):
+    phone_number: str
+
+
+class AuthUserResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

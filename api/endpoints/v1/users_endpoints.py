@@ -1,7 +1,17 @@
 from fastapi import APIRouter
 
-from api.schemas.schemas_v1 import DeleteAccountRequest, RegisterUserRequest
-from api.utils.users_methods import delete_account as delete_account_method, register_user
+from api.schemas.schemas_v1 import (
+    AuthUserRequest,
+    AuthUserResponse,
+    DeleteAccountRequest,
+    RegisterUserRequest,
+)
+from api.utils.jwt_methods import generate_access_token
+from api.utils.users_methods import (
+    authenticate_user,
+    delete_account as delete_account_method,
+    register_user,
+)
 
 
 router = APIRouter()
@@ -19,8 +29,9 @@ async def delete_account(user: DeleteAccountRequest) -> dict[str, bool]:
 
 
 @router.post("/auth")
-async def auth() -> None:
-    pass
+async def auth(user: AuthUserRequest) -> AuthUserResponse:
+    user_id = await authenticate_user(user.phone_number)
+    return AuthUserResponse(access_token=generate_access_token(user_id))
 
 
 @router.post("/reset-phone-number")

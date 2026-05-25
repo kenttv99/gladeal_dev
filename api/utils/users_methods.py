@@ -93,3 +93,11 @@ async def delete_account(user_id: int) -> None:
             result = await session.execute(delete(User).where(User.id == user_id).returning(User.id))
             if result.scalar_one_or_none() is None:
                 raise UserNotFoundError()
+
+
+async def authenticate_user(phone_number: str) -> int:
+    async with AsyncSessionLocal() as session:
+        user_id = await session.scalar(select(User.id).where(User.phone_number == phone_number))
+        if user_id is None:
+            raise UserNotFoundError()
+        return user_id
