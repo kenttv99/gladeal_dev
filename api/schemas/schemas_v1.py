@@ -6,3 +6,7 @@ class RegisterUserRequest(BaseModel):
     last_name: str
     phone_number: str
     ppd: bool = False
+
+
+class DeleteAccountRequest(BaseModel):
+    user_id: int

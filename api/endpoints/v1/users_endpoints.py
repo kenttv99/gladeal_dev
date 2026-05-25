@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from api.schemas.schemas_v1 import RegisterUserRequest
-from api.utils.users_methods import register_user
+from api.schemas.schemas_v1 import DeleteAccountRequest, RegisterUserRequest
+from api.utils.users_methods import delete_account as delete_account_method, register_user
 
 
 router = APIRouter()
@@ -13,8 +13,9 @@ async def register(user: RegisterUserRequest):
 
 
 @router.post("/delete-account")
-async def delete_account() -> None:
-    pass
+async def delete_account(user: DeleteAccountRequest) -> dict[str, bool]:
+    await delete_account_method(user.user_id)
+    return {"success": True}
 
 
 @router.post("/auth")
