@@ -1,12 +1,15 @@
 from fastapi import APIRouter
 
+from api.schemas.schemas_v1 import RegisterUserRequest
+from api.utils.users_parametrs import register_user
+
 
 router = APIRouter()
 
 
 @router.post("/register")
-async def register() -> None:
-    pass
+async def register(user: RegisterUserRequest):
+    return await register_user(**user.dict())
 
 
 @router.post("/delete-account")
