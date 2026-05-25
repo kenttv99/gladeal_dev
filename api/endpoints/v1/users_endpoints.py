@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from api.schemas.schemas_v1 import RegisterUserRequest
-from api.utils.users_parametrs import register_user
+from api.utils.users_methods import register_user
 
 
 router = APIRouter()

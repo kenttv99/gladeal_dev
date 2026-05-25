@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
+from api.endpoints.v1.users_endpoints import router as users_router
 from api.exceptions import register_exception_handlers
 
 
@@ -25,6 +26,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 # Подключаем роутеры с префиксами и тегами
+app.include_router(users_router, prefix="/api/v1/client", tags=["Users"])
 
 
 if __name__ == '__main__':
