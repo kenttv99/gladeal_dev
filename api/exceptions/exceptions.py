@@ -26,6 +26,11 @@ class PhoneNumberAlreadyExistsError(BaseAPIException):
     error_code = "PHONE_NUMBER_ALREADY_EXISTS"
 
 
+class AccountDeletionBlockedByActiveOrdersError(BaseAPIException):
+    status_code = 409
+    error_code = "ACCOUNT_DELETION_BLOCKED_BY_ACTIVE_ORDERS"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"
