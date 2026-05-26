@@ -30,7 +30,7 @@ async def delete_account(user: DeleteAccountRequest) -> dict[str, bool]:
     return {"success": True}
 
 
-@router.post("/auth")
+@router.post("/login")
 async def auth(user: AuthUserRequest) -> AuthUserResponse:
     user_id = await authenticate_user(user.phone_number)
     return AuthUserResponse(access_token=generate_access_token(user_id))
