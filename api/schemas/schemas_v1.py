@@ -32,7 +32,7 @@ class ResetPhoneNumberRequest(BaseModel):
 
 
 class CreateOrderRequest(BaseModel):
-    client_id: int
+    user_id: int
     title: str
     conditions: str
     result_requirements: str
@@ -64,39 +64,39 @@ class OrderInfoResponse(BaseModel):
 
 class ApproveOrderRequest(BaseModel):
     order_id: int
-    performer_id: int
+    user_id: int
 
 
 class PaymentOrderRequest(BaseModel):
     order_id: int
-    client_id: int
+    user_id: int
 
 
 class PerformerConfirmOrderRequest(BaseModel):
     order_id: int
-    performer_id: int
+    user_id: int
 
 
 class ClientConfirmOrderRequest(BaseModel):
     order_id: int
-    client_id: int
+    user_id: int
 
 
 class PerformerDeclineOrderRequest(BaseModel):
     order_id: int
-    performer_id: int
+    user_id: int
 
 
 class ClientSoftDeclineOrderRequest(BaseModel):
     order_id: int
-    client_id: int
+    user_id: int
 
 
 class ClientHardDeclineOrderRequest(BaseModel):
     order_id: int
-    client_id: int
+    user_id: int
 
 
 class PerformerConflictOrderRequest(BaseModel):
     order_id: int
-    performer_id: int
+    user_id: int

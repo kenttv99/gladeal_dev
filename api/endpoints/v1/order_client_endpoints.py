@@ -51,8 +51,8 @@ async def deal_create(
     order: CreateOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ):
-    ensure_authorized_user_id(order.client_id, authorized_user_id)
-    return await create_order(**order.dict())
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    return await create_order(client_id=order.user_id, **order.model_dump(exclude={"user_id"}))
 
 
 @router.post("/deal_payment")
@@ -60,8 +60,8 @@ async def deal_payment(
     order: PaymentOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.client_id, authorized_user_id)
-    await payment_order(order.order_id, order.client_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await payment_order(order.order_id, order.user_id)
     return {"success": True}
 
 
@@ -70,8 +70,8 @@ async def deal_confirm(
     order: ClientConfirmOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.client_id, authorized_user_id)
-    await client_confirm_order(order.order_id, order.client_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await client_confirm_order(order.order_id, order.user_id)
     return {"success": True}
 
 
@@ -80,8 +80,8 @@ async def deal_softdecline(
     order: ClientSoftDeclineOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.client_id, authorized_user_id)
-    await client_softdecline_order(order.order_id, order.client_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await client_softdecline_order(order.order_id, order.user_id)
     return {"success": True}
 
 
@@ -90,8 +90,8 @@ async def deal_harddecline(
     order: ClientHardDeclineOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.client_id, authorized_user_id)
-    await client_harddecline_order(order.order_id, order.client_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await client_harddecline_order(order.order_id, order.user_id)
     return {"success": True}
 
 

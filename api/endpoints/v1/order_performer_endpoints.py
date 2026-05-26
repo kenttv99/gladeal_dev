@@ -32,8 +32,8 @@ async def deal_approve(
     order: ApproveOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.performer_id, authorized_user_id)
-    await approve_order(order.order_id, order.performer_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await approve_order(order.order_id, order.user_id)
     return {"success": True}
 
 
@@ -42,8 +42,8 @@ async def deal_confirm(
     order: PerformerConfirmOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.performer_id, authorized_user_id)
-    await performer_confirm_order(order.order_id, order.performer_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await performer_confirm_order(order.order_id, order.user_id)
     return {"success": True}
 
 
@@ -52,8 +52,8 @@ async def deal_decline(
     order: PerformerDeclineOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.performer_id, authorized_user_id)
-    await performer_decline_order(order.order_id, order.performer_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await performer_decline_order(order.order_id, order.user_id)
     return {"success": True}
 
 
@@ -62,8 +62,8 @@ async def deal_conflict(
     order: PerformerConflictOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.performer_id, authorized_user_id)
-    await performer_conflict_order(order.order_id, order.performer_id)
+    ensure_authorized_user_id(order.user_id, authorized_user_id)
+    await performer_conflict_order(order.order_id, order.user_id)
     return {"success": True}
 
 
