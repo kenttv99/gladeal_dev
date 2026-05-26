@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -6,6 +6,7 @@ from api.endpoints.v1.order_client_endpoints import router as order_client_route
 from api.endpoints.v1.order_performer_endpoints import router as order_performer_router
 from api.endpoints.v1.users_endpoints import router as users_router
 from api.exceptions import register_exception_handlers
+from api.utils.jwt_methods import authorize_user
 
 
 
@@ -29,8 +30,18 @@ register_exception_handlers(app)
 
 # Подключаем роутеры с префиксами и тегами
 app.include_router(users_router, prefix="/api/v1/auth", tags=["Auth"])
-app.include_router(order_client_router, prefix="/api/v1/client", tags=["Client orders"])
-app.include_router(order_performer_router, prefix="/api/v1/performer", tags=["Performer orders"])
+app.include_router(
+    order_client_router,
+    prefix="/api/v1/client",
+    tags=["Client orders"],
+    dependencies=[Depends(authorize_user)],
+)
+app.include_router(
+    order_performer_router,
+    prefix="/api/v1/performer",
+    tags=["Performer orders"],
+    dependencies=[Depends(authorize_user)],
+)
 
 
 if __name__ == '__main__':

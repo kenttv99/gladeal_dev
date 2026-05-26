@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from api.schemas.schemas_v1 import (
     AuthUserRequest,
@@ -7,7 +7,7 @@ from api.schemas.schemas_v1 import (
     RegisterUserRequest,
     ResetPhoneNumberRequest,
 )
-from api.utils.jwt_methods import generate_access_token
+from api.utils.jwt_methods import authorize_user, generate_access_token
 from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
@@ -24,7 +24,7 @@ async def register(user: RegisterUserRequest):
     return await register_user(**user.dict())
 
 
-@router.post("/delete-account")
+@router.post("/delete-account", dependencies=[Depends(authorize_user)])
 async def delete_account(user: DeleteAccountRequest) -> dict[str, bool]:
     await delete_account_method(user.user_id)
     return {"success": True}
@@ -36,7 +36,7 @@ async def auth(user: AuthUserRequest) -> AuthUserResponse:
     return AuthUserResponse(access_token=generate_access_token(user_id))
 
 
-@router.post("/reset-phone-number")
+@router.post("/reset-phone-number", dependencies=[Depends(authorize_user)])
 async def reset_phone_number(user: ResetPhoneNumberRequest) -> dict[str, bool]:
     await reset_phone_number_method(user.user_id, user.phone_number)
     return {"success": True}
