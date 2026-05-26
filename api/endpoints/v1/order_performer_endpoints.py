@@ -1,8 +1,16 @@
 from fastapi import APIRouter
 
 from api.enums.enums_v1 import UserRoles
-from api.schemas.schemas_v1 import ApproveOrderRequest, OrderInfoResponse
-from api.utils.orders_methods import approve_order, get_active_orders_by_role
+from api.schemas.schemas_v1 import (
+    ApproveOrderRequest,
+    OrderInfoResponse,
+    PerformerConfirmOrderRequest,
+)
+from api.utils.orders_methods import (
+    approve_order,
+    get_active_orders_by_role,
+    performer_confirm_order,
+)
 
 
 router = APIRouter()
@@ -20,8 +28,9 @@ async def deal_approve(order: ApproveOrderRequest) -> dict[str, bool]:
 
 
 @router.post("/deal_confirm")
-async def deal_confirm() -> None:
-    pass
+async def deal_confirm(order: PerformerConfirmOrderRequest) -> dict[str, bool]:
+    await performer_confirm_order(order.order_id, order.performer_id)
+    return {"success": True}
 
 
 @router.post("/deal_decline")

@@ -70,3 +70,13 @@ class ApproveOrderRequest(BaseModel):
 class PaymentOrderRequest(BaseModel):
     order_id: int
     client_id: int
+
+
+class PerformerConfirmOrderRequest(BaseModel):
+    order_id: int
+    performer_id: int
+
+
+class ClientConfirmOrderRequest(BaseModel):
+    order_id: int
+    client_id: int

@@ -171,7 +171,7 @@ async def approve_order(order_id: int, performer_id: int) -> None:
 
 
 async def payment_order(order_id: int, client_id: int) -> None:
-    """Переводим сделку в состояние после оплаты и ожидания подтверждения со стороны исполнителя"""
+    """Переводим сделку в состояние после оплаты и ожидания выполнения сделки со стороны исполнителя"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
             client_exists = await session.scalar(
@@ -200,6 +200,76 @@ async def payment_order(order_id: int, client_id: int) -> None:
                         else current_status
                     ),
                     new_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+                    changed_by_user_id=client_id,
+                )
+            )
+
+
+async def performer_confirm_order(order_id: int, performer_id: int) -> None:
+    """Переводим сделку в состояние ожидания подтверждения заказчиком"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            performer_exists = await session.scalar(
+                select(exists().where(User.id == performer_id))
+            )
+            if not performer_exists:
+                raise UserNotFoundError()
+
+            current_status = await session.scalar(
+                select(Order.status).where(Order.id == order_id).with_for_update()
+            )
+            if current_status is None:
+                raise OrderNotFoundError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value)
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+                    changed_by_user_id=performer_id,
+                )
+            )
+
+
+async def client_confirm_order(order_id: int, client_id: int) -> None:
+    """Переводим сделку в состояние успешного завершения"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            client_exists = await session.scalar(
+                select(exists().where(User.id == client_id))
+            )
+            if not client_exists:
+                raise UserNotFoundError()
+
+            current_status = await session.scalar(
+                select(Order.status).where(Order.id == order_id).with_for_update()
+            )
+            if current_status is None:
+                raise OrderNotFoundError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=OrderStates.SUCCESSFUL_COMPLETION.value)
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.SUCCESSFUL_COMPLETION.value,
                     changed_by_user_id=client_id,
                 )
             )

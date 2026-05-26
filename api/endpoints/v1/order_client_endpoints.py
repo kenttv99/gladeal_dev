@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends
 
 from api.enums.enums_v1 import UserRoles
 from api.schemas.schemas_v1 import (
+    ClientConfirmOrderRequest,
     CreateOrderRequest,
     OrderInfoRequest,
     OrderInfoResponse,
     PaymentOrderRequest,
 )
 from api.utils.orders_methods import (
+    client_confirm_order,
     create_order,
     get_active_orders_by_role,
     get_order_by_slug,
@@ -44,8 +46,9 @@ async def deal_payment(order: PaymentOrderRequest) -> dict[str, bool]:
 
 
 @router.post("/deal_confirm")
-async def deal_confirm() -> None:
-    pass
+async def deal_confirm(order: ClientConfirmOrderRequest) -> dict[str, bool]:
+    await client_confirm_order(order.order_id, order.client_id)
+    return {"success": True}
 
 
 @router.post("/deal_softdecline")
