@@ -69,7 +69,7 @@ async def create_order(
                         raise UserNotFoundError()
 
                     limit_check = await check_user_month_orders_limit(session, client_id, price)
-                    if not limit_check["success"]:
+                    if limit_check["is_limit_exceeded"]:
                         raise MonthOrdersLimitExceededError(details=limit_check)
 
                     result = await session.execute(

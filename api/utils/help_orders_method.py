@@ -48,6 +48,6 @@ async def check_user_month_orders_limit(
     delta = current_month_sum + price - MONTH_SUM_LIMIT_PER_USER
 
     return {
-        "success": delta <= 0,
+        "is_limit_exceeded": delta > 0,
         "delta": str(max(delta, Decimal("0"))),
     }
