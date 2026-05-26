@@ -46,6 +46,11 @@ class OrderAlreadyAcceptedError(BaseAPIException):
     error_code = "ORDER_ALREADY_ACCEPTED"
 
 
+class OrderSelfExecutionForbiddenError(BaseAPIException):
+    status_code = 403
+    error_code = "ORDER_SELF_EXECUTION_FORBIDDEN"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"

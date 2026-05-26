@@ -6,6 +6,7 @@
   "MONTH_ORDERS_LIMIT_EXCEEDED": "The user's monthly order amount limit has been exceeded.",
   "ORDER_NOT_FOUND": "Order not found.",
   "ORDER_ALREADY_ACCEPTED": "Order cannot be declined because it has already been accepted by a performer.",
+  "ORDER_SELF_EXECUTION_FORBIDDEN": "A user cannot perform their own order.",
   "INVALID_CREDENTIALS": "Invalid email or password.",
   "ACCESS_DENIED": "You do not have permission to perform this action.",
   "VALIDATION_ERROR": "Input validation failed."

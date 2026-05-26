@@ -1,4 +1,3 @@
-from os import getenv
 from secrets import token_urlsafe
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -6,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import func, select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import MONTH_SUM_LIMIT_PER_USER
+from api.config import BASE_SITE_LINK, MONTH_SUM_LIMIT_PER_USER
 from database.models.orders import Order
 
 
@@ -22,10 +21,7 @@ async def generate_order_slug(session: AsyncSession) -> str:
 
 
 def generate_order_link(slug: str) -> str:
-    base_site_link = getenv("BASE_SITE_LINK")
-    if not base_site_link:
-        raise RuntimeError("BASE_SITE_LINK is not set")
-    return f"{base_site_link.rstrip('/')}/{DEAL_SCREEN_PATH}/{slug}"
+    return f"{BASE_SITE_LINK.rstrip('/')}/{DEAL_SCREEN_PATH}/{slug}"
 
 
 async def check_user_month_orders_limit(

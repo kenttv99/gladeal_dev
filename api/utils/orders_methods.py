@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import exists, insert, or_, select, update
+from sqlalchemy import and_, exists, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates, UserRoles
@@ -8,6 +8,7 @@ from api.exceptions import (
     MonthOrdersLimitExceededError,
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
+    OrderSelfExecutionForbiddenError,
     UserNotFoundError,
     ValidationError,
 )
@@ -135,7 +136,10 @@ async def get_active_orders_by_role(role: UserRoles | str, user_id: int) -> list
         if role_value == UserRoles.PERFORMER.value:
             query = query.where(
                 or_(
-                    Order.status == OrderStates.AWAITING_PERFORMER.value,
+                    and_(
+                        Order.status == OrderStates.AWAITING_PERFORMER.value,
+                        Order.client_id != user_id,
+                    ),
                     Order.performer_id == user_id,
                 )
             )
@@ -157,15 +161,25 @@ async def approve_order(order_id: int, performer_id: int) -> None:
                 raise UserNotFoundError()
 
             order_data = await session.execute(
-                select(Order.status, Order.performer_id)
+                select(Order.status, Order.performer_id, Order.client_id)
                 .where(Order.id == order_id)
                 .with_for_update()
             )
             order_row = order_data.one_or_none()
             if order_row is None:
                 raise OrderNotFoundError()
-            current_status, current_performer_id = order_row
-            if current_performer_id is not None:
+            current_status, current_performer_id, client_id = order_row
+            if client_id == performer_id:
+                raise OrderSelfExecutionForbiddenError()
+            current_status_value = (
+                current_status.value
+                if isinstance(current_status, OrderStates)
+                else current_status
+            )
+            if (
+                current_performer_id is not None
+                or current_status_value != OrderStates.AWAITING_PERFORMER.value
+            ):
                 raise OrderAlreadyAcceptedError()
 
             await session.execute(
@@ -179,11 +193,7 @@ async def approve_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 insert(OrderStatusHistory).values(
                     order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
+                    old_status=current_status_value,
                     new_status=OrderStates.AWAITING_PAYMENT.value,
                     changed_by_user_id=performer_id,
                 )
@@ -237,13 +247,17 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             if not performer_exists:
                 raise UserNotFoundError()
 
-            current_status = await session.scalar(
-                select(Order.status)
+            order_data = await session.execute(
+                select(Order.status, Order.client_id)
                 .where(Order.id == order_id, Order.performer_id == performer_id)
                 .with_for_update()
             )
-            if current_status is None:
+            order_row = order_data.one_or_none()
+            if order_row is None:
                 raise OrderNotFoundError()
+            current_status, client_id = order_row
+            if client_id == performer_id:
+                raise OrderSelfExecutionForbiddenError()
 
             await session.execute(
                 update(Order)
@@ -311,13 +325,17 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
             if not performer_exists:
                 raise UserNotFoundError()
 
-            current_status = await session.scalar(
-                select(Order.status)
+            order_data = await session.execute(
+                select(Order.status, Order.client_id)
                 .where(Order.id == order_id, Order.performer_id == performer_id)
                 .with_for_update()
             )
-            if current_status is None:
+            order_row = order_data.one_or_none()
+            if order_row is None:
                 raise OrderNotFoundError()
+            current_status, client_id = order_row
+            if client_id == performer_id:
+                raise OrderSelfExecutionForbiddenError()
 
             await session.execute(
                 update(Order)
@@ -426,13 +444,17 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
             if not performer_exists:
                 raise UserNotFoundError()
 
-            current_status = await session.scalar(
-                select(Order.status)
+            order_data = await session.execute(
+                select(Order.status, Order.client_id)
                 .where(Order.id == order_id, Order.performer_id == performer_id)
                 .with_for_update()
             )
-            if current_status is None:
+            order_row = order_data.one_or_none()
+            if order_row is None:
                 raise OrderNotFoundError()
+            current_status, client_id = order_row
+            if client_id == performer_id:
+                raise OrderSelfExecutionForbiddenError()
 
             await session.execute(
                 update(Order)
