@@ -31,6 +31,11 @@ class AccountDeletionBlockedByActiveOrdersError(BaseAPIException):
     error_code = "ACCOUNT_DELETION_BLOCKED_BY_ACTIVE_ORDERS"
 
 
+class MonthOrdersLimitExceededError(BaseAPIException):
+    status_code = 409
+    error_code = "MONTH_ORDERS_LIMIT_EXCEEDED"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"

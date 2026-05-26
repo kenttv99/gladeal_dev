@@ -3,6 +3,7 @@
   "USER_NOT_FOUND": "User not found.",
   "PHONE_NUMBER_ALREADY_EXISTS": "A user with this phone number already exists.",
   "ACCOUNT_DELETION_BLOCKED_BY_ACTIVE_ORDERS": "Account cannot be deleted while active orders exist.",
+  "MONTH_ORDERS_LIMIT_EXCEEDED": "The user's monthly order amount limit has been exceeded.",
   "INVALID_CREDENTIALS": "Invalid email or password.",
   "ACCESS_DENIED": "You do not have permission to perform this action.",
   "VALIDATION_ERROR": "Input validation failed."
