@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from api.utils.orders_methods import get_order_link
+from api.schemas.schemas_v1 import CreateOrderRequest
+from api.utils.orders_methods import create_order, get_order_link
 
 
 router = APIRouter()
@@ -20,8 +21,8 @@ async def deals() -> None:
 
 
 @router.post("/deal_create")
-async def deal_create() -> None:
-    pass
+async def deal_create(order: CreateOrderRequest):
+    return await create_order(**order.dict())
 
 
 @router.post("/deal_payment")

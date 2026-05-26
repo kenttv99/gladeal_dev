@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic import BaseModel
 
 
@@ -24,3 +26,12 @@ class AuthUserResponse(BaseModel):
 class ResetPhoneNumberRequest(BaseModel):
     user_id: int
     phone_number: str
+
+
+class CreateOrderRequest(BaseModel):
+    client_id: int
+    title: str
+    conditions: str
+    result_requirements: str
+    violation_proof_requirements: str
+    price: Decimal
