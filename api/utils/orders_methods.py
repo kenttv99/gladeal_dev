@@ -102,6 +102,7 @@ async def get_order_link(order_id: int) -> str:
 
 
 async def get_order_by_slug(slug: str) -> Order:
+    """Достаем информацию об ордере по слагу"""
     async with AsyncSessionLocal() as session:
         order = await session.scalar(select(Order).where(Order.slug == slug))
         if order is None:
@@ -110,6 +111,7 @@ async def get_order_by_slug(slug: str) -> Order:
 
 
 async def get_active_orders_by_role(role: UserRoles | str) -> list[Order]:
+    """Получаем список активных ордеров в зависимости от роли пользователя"""
     role_value = role.value if isinstance(role, UserRoles) else role
     if role_value not in {UserRoles.CLIENT.value, UserRoles.PERFORMER.value}:
         raise ValidationError()
