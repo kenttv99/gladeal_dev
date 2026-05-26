@@ -1,15 +1,30 @@
 from decimal import Decimal
 
-from sqlalchemy import exists, insert, select
+from sqlalchemy import exists, insert, or_, select
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import OrderStates
-from api.exceptions import MonthOrdersLimitExceededError, OrderNotFoundError, UserNotFoundError
+from api.enums.enums_v1 import OrderStates, UserRoles
+from api.exceptions import (
+    MonthOrdersLimitExceededError,
+    OrderNotFoundError,
+    UserNotFoundError,
+    ValidationError,
+)
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
 from database.config import AsyncSessionLocal
 from database.models.orders import Order, OrderStatusHistory
 from database.models.users import User
+
+
+ACTIVE_ORDER_STATUSES = (
+    OrderStates.AWAITING_PERFORMER.value,
+    OrderStates.AWAITING_PAYMENT.value,
+    OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+    OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+    OrderStates.AWAITING_CONFLICT.value,
+    OrderStates.OPEN_CONFLICT.value,
+)
 
 
 async def create_order(
@@ -23,6 +38,7 @@ async def create_order(
     
     """
     Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env
+    Состояние дублируется в таблицу историй состояний сделки.
     
     """
 
@@ -83,3 +99,32 @@ async def get_order_link(order_id: int) -> str:
         if slug is None:
             raise OrderNotFoundError()
         return generate_order_link(slug)
+
+
+async def get_order_by_slug(slug: str) -> Order:
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(select(Order).where(Order.slug == slug))
+        if order is None:
+            raise OrderNotFoundError()
+        return order
+
+
+async def get_active_orders_by_role(role: UserRoles | str) -> list[Order]:
+    role_value = role.value if isinstance(role, UserRoles) else role
+    if role_value not in {UserRoles.CLIENT.value, UserRoles.PERFORMER.value}:
+        raise ValidationError()
+
+    async with AsyncSessionLocal() as session:
+        query = select(Order).where(Order.status.in_(ACTIVE_ORDER_STATUSES))
+        if role_value == UserRoles.PERFORMER.value:
+            query = query.where(
+                or_(
+                    Order.status == OrderStates.AWAITING_PERFORMER.value,
+                    Order.performer_id.is_not(None),
+                )
+            )
+
+        result = await session.scalars(
+            query.order_by(Order.created_at.desc())
+        )
+        return list(result.all())

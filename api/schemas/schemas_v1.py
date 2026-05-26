@@ -1,6 +1,9 @@
+from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from api.enums.enums_v1 import OrderStates
 
 
 class RegisterUserRequest(BaseModel):
@@ -35,3 +38,25 @@ class CreateOrderRequest(BaseModel):
     result_requirements: str
     violation_proof_requirements: str
     price: Decimal
+
+
+class OrderInfoRequest(BaseModel):
+    slug: str
+
+
+class OrderInfoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+    id: int
+    client_id: int
+    performer_id: int | None
+    title: str
+    conditions: str
+    result_requirements: str
+    violation_proof_requirements: str
+    slug: str
+    price: Decimal
+    status: OrderStates
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None

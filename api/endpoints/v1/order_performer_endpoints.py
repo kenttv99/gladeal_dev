@@ -1,12 +1,16 @@
 from fastapi import APIRouter
 
+from api.enums.enums_v1 import UserRoles
+from api.schemas.schemas_v1 import OrderInfoResponse
+from api.utils.orders_methods import get_active_orders_by_role
+
 
 router = APIRouter()
 
 
-@router.get("/deals")
-async def deals() -> None:
-    pass
+@router.get("/deals", response_model=list[OrderInfoResponse])
+async def deals():
+    return await get_active_orders_by_role(UserRoles.PERFORMER)
 
 
 @router.post("/deal_approve")
