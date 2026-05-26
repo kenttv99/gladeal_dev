@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import and_, exists, insert, or_, select, update
+from sqlalchemy import exists, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates, UserRoles
@@ -34,6 +34,13 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
 )
+
+
+def _order_status_values(status: str) -> dict[str, object]:
+    values: dict[str, object] = {"status": status}
+    if status in CLOSED_ORDER_STATUSES:
+        values["completed_at"] = func.now()
+    return values
 
 
 async def create_order(
@@ -134,15 +141,7 @@ async def get_active_orders_by_role(role: UserRoles | str, user_id: int) -> list
         if role_value == UserRoles.CLIENT.value:
             query = query.where(Order.client_id == user_id)
         if role_value == UserRoles.PERFORMER.value:
-            query = query.where(
-                or_(
-                    and_(
-                        Order.status == OrderStates.AWAITING_PERFORMER.value,
-                        Order.client_id != user_id,
-                    ),
-                    Order.performer_id == user_id,
-                )
-            )
+            query = query.where(Order.performer_id == user_id)
 
         result = await session.scalars(
             query.order_by(Order.created_at.desc())
@@ -187,7 +186,7 @@ async def approve_order(order_id: int, performer_id: int) -> None:
                 .where(Order.id == order_id)
                 .values(
                     performer_id=performer_id,
-                    status=OrderStates.AWAITING_PAYMENT.value,
+                    **_order_status_values(OrderStates.AWAITING_PAYMENT.value),
                 )
             )
             await session.execute(
@@ -221,7 +220,7 @@ async def payment_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value)
+                .values(**_order_status_values(OrderStates.AWAITING_PERFORMER_CONFIRMATION.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -262,7 +261,7 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value)
+                .values(**_order_status_values(OrderStates.AWAITING_CLIENT_CONFIRMATION.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -299,7 +298,7 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.SUCCESSFUL_COMPLETION.value)
+                .values(**_order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -340,7 +339,7 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.UNSUCCESSFUL_COMPLETION.value)
+                .values(**_order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -381,7 +380,7 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.UNSUCCESSFUL_COMPLETION.value)
+                .values(**_order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -418,7 +417,7 @@ async def client_harddecline_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.AWAITING_CONFLICT.value)
+                .values(**_order_status_values(OrderStates.AWAITING_CONFLICT.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -459,7 +458,7 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(status=OrderStates.OPEN_CONFLICT.value)
+                .values(**_order_status_values(OrderStates.OPEN_CONFLICT.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
