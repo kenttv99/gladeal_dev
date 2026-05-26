@@ -65,3 +65,8 @@ class OrderInfoResponse(BaseModel):
 class ApproveOrderRequest(BaseModel):
     order_id: int
     performer_id: int
+
+
+class PaymentOrderRequest(BaseModel):
+    order_id: int
+    client_id: int

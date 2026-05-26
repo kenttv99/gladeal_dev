@@ -1,12 +1,18 @@
 from fastapi import APIRouter, Depends
 
 from api.enums.enums_v1 import UserRoles
-from api.schemas.schemas_v1 import CreateOrderRequest, OrderInfoRequest, OrderInfoResponse
+from api.schemas.schemas_v1 import (
+    CreateOrderRequest,
+    OrderInfoRequest,
+    OrderInfoResponse,
+    PaymentOrderRequest,
+)
 from api.utils.orders_methods import (
     create_order,
     get_active_orders_by_role,
     get_order_by_slug,
     get_order_link,
+    payment_order,
 )
 
 
@@ -32,8 +38,9 @@ async def deal_create(order: CreateOrderRequest):
 
 
 @router.post("/deal_payment")
-async def deal_payment() -> None:
-    pass
+async def deal_payment(order: PaymentOrderRequest) -> dict[str, bool]:
+    await payment_order(order.order_id, order.client_id)
+    return {"success": True}
 
 
 @router.post("/deal_confirm")
