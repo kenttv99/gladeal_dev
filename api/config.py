@@ -1,4 +1,5 @@
 from os import getenv
+from decimal import Decimal
 
 from dotenv import load_dotenv
 
@@ -23,3 +24,4 @@ if not MONTH_SUM_LIMIT_PER_USER:
     raise RuntimeError("MONTH_SUM_LIMIT_PER_USER is not set")
 
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+MONTH_SUM_LIMIT_PER_USER = Decimal(MONTH_SUM_LIMIT_PER_USER)

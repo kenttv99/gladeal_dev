@@ -38,7 +38,8 @@ async def check_user_month_orders_limit(
             Order.created_at < next_month,
         )
     )
-    delta = Decimal(month_sum) + price - Decimal(MONTH_SUM_LIMIT_PER_USER)
+    current_month_sum = month_sum or Decimal("0")
+    delta = current_month_sum + price - MONTH_SUM_LIMIT_PER_USER
 
     return {
         "success": delta <= 0,
