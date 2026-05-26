@@ -27,6 +27,13 @@ ACTIVE_ORDER_STATUSES = (
     OrderStates.OPEN_CONFLICT.value,
 )
 
+CLOSED_ORDER_STATUSES = (
+    OrderStates.SUCCESSFUL_COMPLETION.value,
+    OrderStates.UNSUCCESSFUL_COMPLETION.value,
+    OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
+    OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
+)
+
 
 async def create_order(
     client_id: int,
@@ -350,3 +357,98 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
                     changed_by_user_id=client_id,
                 )
             )
+
+
+async def client_harddecline_order(order_id: int, client_id: int) -> None:
+    """Переводим сделку в состояние ожидания подтверждения отказа исполнителем"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            client_exists = await session.scalar(
+                select(exists().where(User.id == client_id))
+            )
+            if not client_exists:
+                raise UserNotFoundError()
+
+            current_status = await session.scalar(
+                select(Order.status).where(Order.id == order_id).with_for_update()
+            )
+            if current_status is None:
+                raise OrderNotFoundError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=OrderStates.AWAITING_CONFLICT.value)
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.AWAITING_CONFLICT.value,
+                    changed_by_user_id=client_id,
+                )
+            )
+
+
+async def performer_conflict_order(order_id: int, performer_id: int) -> None:
+    """Переводим сделку в состояние открытого спора исполнителем"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            performer_exists = await session.scalar(
+                select(exists().where(User.id == performer_id))
+            )
+            if not performer_exists:
+                raise UserNotFoundError()
+
+            current_status = await session.scalar(
+                select(Order.status).where(Order.id == order_id).with_for_update()
+            )
+            if current_status is None:
+                raise OrderNotFoundError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=OrderStates.OPEN_CONFLICT.value)
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.OPEN_CONFLICT.value,
+                    changed_by_user_id=performer_id,
+                )
+            )
+
+
+async def get_client_closed_orders() -> list[Order]:
+    """Получаем список закрытых сделок заказчика"""
+    async with AsyncSessionLocal() as session:
+        result = await session.scalars(
+            select(Order)
+            .where(Order.status.in_(CLOSED_ORDER_STATUSES))
+            .order_by(Order.updated_at.desc())
+        )
+        return list(result.all())
+
+
+async def get_performer_closed_orders() -> list[Order]:
+    """Получаем список закрытых сделок исполнителя"""
+    async with AsyncSessionLocal() as session:
+        result = await session.scalars(
+            select(Order)
+            .where(
+                Order.status.in_(CLOSED_ORDER_STATUSES),
+                Order.performer_id.is_not(None),
+            )
+            .order_by(Order.updated_at.desc())
+        )
+        return list(result.all())

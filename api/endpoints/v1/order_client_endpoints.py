@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from api.enums.enums_v1 import UserRoles
 from api.schemas.schemas_v1 import (
     ClientConfirmOrderRequest,
+    ClientHardDeclineOrderRequest,
     ClientSoftDeclineOrderRequest,
     CreateOrderRequest,
     OrderInfoRequest,
@@ -11,9 +12,11 @@ from api.schemas.schemas_v1 import (
 )
 from api.utils.orders_methods import (
     client_confirm_order,
+    client_harddecline_order,
     client_softdecline_order,
     create_order,
     get_active_orders_by_role,
+    get_client_closed_orders,
     get_order_by_slug,
     get_order_link,
     payment_order,
@@ -60,10 +63,11 @@ async def deal_softdecline(order: ClientSoftDeclineOrderRequest) -> dict[str, bo
 
 
 @router.post("/deal_harddecline")
-async def deal_harddecline() -> None:
-    pass
+async def deal_harddecline(order: ClientHardDeclineOrderRequest) -> dict[str, bool]:
+    await client_harddecline_order(order.order_id, order.client_id)
+    return {"success": True}
 
 
-@router.get("/deals_archive")
-async def deals_archive() -> None:
-    pass
+@router.get("/deals_archive", response_model=list[OrderInfoResponse])
+async def deals_archive():
+    return await get_client_closed_orders()

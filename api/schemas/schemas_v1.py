@@ -90,3 +90,13 @@ class PerformerDeclineOrderRequest(BaseModel):
 class ClientSoftDeclineOrderRequest(BaseModel):
     order_id: int
     client_id: int
+
+
+class ClientHardDeclineOrderRequest(BaseModel):
+    order_id: int
+    client_id: int
+
+
+class PerformerConflictOrderRequest(BaseModel):
+    order_id: int
+    performer_id: int

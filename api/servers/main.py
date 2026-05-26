@@ -26,7 +26,7 @@ app.add_middleware(
 register_exception_handlers(app)
 
 # Подключаем роутеры с префиксами и тегами
-app.include_router(users_router, prefix="/api/v1/client", tags=["Users"])
+app.include_router(users_router, prefix="/api/v1/client", tags=["Auth"])
 
 
 if __name__ == '__main__':
