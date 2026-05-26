@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from sqlalchemy import exists, insert, or_, select
+from sqlalchemy import exists, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates, UserRoles
@@ -130,3 +130,40 @@ async def get_active_orders_by_role(role: UserRoles | str) -> list[Order]:
             query.order_by(Order.created_at.desc())
         )
         return list(result.all())
+
+
+async def approve_order(order_id: int, performer_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            performer_exists = await session.scalar(
+                select(exists().where(User.id == performer_id))
+            )
+            if not performer_exists:
+                raise UserNotFoundError()
+
+            current_status = await session.scalar(
+                select(Order.status).where(Order.id == order_id).with_for_update()
+            )
+            if current_status is None:
+                raise OrderNotFoundError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(
+                    performer_id=performer_id,
+                    status=OrderStates.AWAITING_PAYMENT.value,
+                )
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.AWAITING_PAYMENT.value,
+                    changed_by_user_id=performer_id,
+                )
+            )

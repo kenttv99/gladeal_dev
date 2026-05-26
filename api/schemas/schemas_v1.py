@@ -60,3 +60,8 @@ class OrderInfoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+
+
+class ApproveOrderRequest(BaseModel):
+    order_id: int
+    performer_id: int
