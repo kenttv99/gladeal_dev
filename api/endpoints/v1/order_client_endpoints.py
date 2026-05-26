@@ -4,11 +4,6 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-@router.post("/generate_link")
-async def generate_link() -> None:
-    pass
-
-
 @router.get("/order_link")
 async def order_link() -> None:
     pass
