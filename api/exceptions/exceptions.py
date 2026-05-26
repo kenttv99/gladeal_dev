@@ -41,6 +41,11 @@ class OrderNotFoundError(BaseAPIException):
     error_code = "ORDER_NOT_FOUND"
 
 
+class OrderAlreadyAcceptedError(BaseAPIException):
+    status_code = 409
+    error_code = "ORDER_ALREADY_ACCEPTED"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"

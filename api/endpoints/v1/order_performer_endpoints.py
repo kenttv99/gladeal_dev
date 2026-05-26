@@ -5,11 +5,13 @@ from api.schemas.schemas_v1 import (
     ApproveOrderRequest,
     OrderInfoResponse,
     PerformerConfirmOrderRequest,
+    PerformerDeclineOrderRequest,
 )
 from api.utils.orders_methods import (
     approve_order,
     get_active_orders_by_role,
     performer_confirm_order,
+    performer_decline_order,
 )
 
 
@@ -34,8 +36,9 @@ async def deal_confirm(order: PerformerConfirmOrderRequest) -> dict[str, bool]:
 
 
 @router.post("/deal_decline")
-async def deal_decline() -> None:
-    pass
+async def deal_decline(order: PerformerDeclineOrderRequest) -> dict[str, bool]:
+    await performer_decline_order(order.order_id, order.performer_id)
+    return {"success": True}
 
 
 @router.post("/deal_conflict")

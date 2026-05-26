@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from api.enums.enums_v1 import OrderStates, UserRoles
 from api.exceptions import (
     MonthOrdersLimitExceededError,
+    OrderAlreadyAcceptedError,
     OrderNotFoundError,
     UserNotFoundError,
     ValidationError,
@@ -270,6 +271,82 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
                         else current_status
                     ),
                     new_status=OrderStates.SUCCESSFUL_COMPLETION.value,
+                    changed_by_user_id=client_id,
+                )
+            )
+
+
+async def performer_decline_order(order_id: int, performer_id: int) -> None:
+    """Переводим сделку в состояние неуспешного завершения по отказу исполнителя"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            performer_exists = await session.scalar(
+                select(exists().where(User.id == performer_id))
+            )
+            if not performer_exists:
+                raise UserNotFoundError()
+
+            current_status = await session.scalar(
+                select(Order.status).where(Order.id == order_id).with_for_update()
+            )
+            if current_status is None:
+                raise OrderNotFoundError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=OrderStates.UNSUCCESSFUL_COMPLETION.value)
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.UNSUCCESSFUL_COMPLETION.value,
+                    changed_by_user_id=performer_id,
+                )
+            )
+
+
+async def client_softdecline_order(order_id: int, client_id: int) -> None:
+    """Переводим сделку в неуспешное завершение, если исполнитель еще не принял ее"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            client_exists = await session.scalar(
+                select(exists().where(User.id == client_id))
+            )
+            if not client_exists:
+                raise UserNotFoundError()
+
+            order_data = await session.execute(
+                select(Order.status, Order.performer_id)
+                .where(Order.id == order_id)
+                .with_for_update()
+            )
+            order_row = order_data.one_or_none()
+            if order_row is None:
+                raise OrderNotFoundError()
+            current_status, performer_id = order_row
+            if performer_id is not None:
+                raise OrderAlreadyAcceptedError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(status=OrderStates.UNSUCCESSFUL_COMPLETION.value)
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=(
+                        current_status.value
+                        if isinstance(current_status, OrderStates)
+                        else current_status
+                    ),
+                    new_status=OrderStates.UNSUCCESSFUL_COMPLETION.value,
                     changed_by_user_id=client_id,
                 )
             )

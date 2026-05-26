@@ -80,3 +80,13 @@ class PerformerConfirmOrderRequest(BaseModel):
 class ClientConfirmOrderRequest(BaseModel):
     order_id: int
     client_id: int
+
+
+class PerformerDeclineOrderRequest(BaseModel):
+    order_id: int
+    performer_id: int
+
+
+class ClientSoftDeclineOrderRequest(BaseModel):
+    order_id: int
+    client_id: int

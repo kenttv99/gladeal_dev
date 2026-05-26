@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from api.enums.enums_v1 import UserRoles
 from api.schemas.schemas_v1 import (
     ClientConfirmOrderRequest,
+    ClientSoftDeclineOrderRequest,
     CreateOrderRequest,
     OrderInfoRequest,
     OrderInfoResponse,
@@ -10,6 +11,7 @@ from api.schemas.schemas_v1 import (
 )
 from api.utils.orders_methods import (
     client_confirm_order,
+    client_softdecline_order,
     create_order,
     get_active_orders_by_role,
     get_order_by_slug,
@@ -52,17 +54,13 @@ async def deal_confirm(order: ClientConfirmOrderRequest) -> dict[str, bool]:
 
 
 @router.post("/deal_softdecline")
-async def deal_softdecline() -> None:
-    pass
+async def deal_softdecline(order: ClientSoftDeclineOrderRequest) -> dict[str, bool]:
+    await client_softdecline_order(order.order_id, order.client_id)
+    return {"success": True}
 
 
 @router.post("/deal_harddecline")
 async def deal_harddecline() -> None:
-    pass
-
-
-@router.post("/deal_conflict")
-async def deal_conflict() -> None:
     pass
 
 
