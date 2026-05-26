@@ -95,7 +95,7 @@ async def create_order(
                 raise
 
 
-async def get_order_link(order_id: int) -> str:
+async def get_order_link(order_id: int, client_id: int) -> str:
 
     """
     Метод получает slug ордера и генерирует полноценную ссылку для перехода на страницу с информацией о сделке
@@ -103,22 +103,26 @@ async def get_order_link(order_id: int) -> str:
     """
 
     async with AsyncSessionLocal() as session:
-        slug = await session.scalar(select(Order.slug).where(Order.id == order_id))
+        slug = await session.scalar(
+            select(Order.slug).where(Order.id == order_id, Order.client_id == client_id)
+        )
         if slug is None:
             raise OrderNotFoundError()
         return generate_order_link(slug)
 
 
-async def get_order_by_slug(slug: str) -> Order:
+async def get_order_by_slug(slug: str, client_id: int) -> Order:
     """Достаем информацию об ордере по слагу"""
     async with AsyncSessionLocal() as session:
-        order = await session.scalar(select(Order).where(Order.slug == slug))
+        order = await session.scalar(
+            select(Order).where(Order.slug == slug, Order.client_id == client_id)
+        )
         if order is None:
             raise OrderNotFoundError()
         return order
 
 
-async def get_active_orders_by_role(role: UserRoles | str) -> list[Order]:
+async def get_active_orders_by_role(role: UserRoles | str, user_id: int) -> list[Order]:
     """Получаем список активных ордеров в зависимости от роли пользователя"""
     role_value = role.value if isinstance(role, UserRoles) else role
     if role_value not in {UserRoles.CLIENT.value, UserRoles.PERFORMER.value}:
@@ -126,11 +130,13 @@ async def get_active_orders_by_role(role: UserRoles | str) -> list[Order]:
 
     async with AsyncSessionLocal() as session:
         query = select(Order).where(Order.status.in_(ACTIVE_ORDER_STATUSES))
+        if role_value == UserRoles.CLIENT.value:
+            query = query.where(Order.client_id == user_id)
         if role_value == UserRoles.PERFORMER.value:
             query = query.where(
                 or_(
                     Order.status == OrderStates.AWAITING_PERFORMER.value,
-                    Order.performer_id.is_not(None),
+                    Order.performer_id == user_id,
                 )
             )
 
@@ -150,11 +156,17 @@ async def approve_order(order_id: int, performer_id: int) -> None:
             if not performer_exists:
                 raise UserNotFoundError()
 
-            current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+            order_data = await session.execute(
+                select(Order.status, Order.performer_id)
+                .where(Order.id == order_id)
+                .with_for_update()
             )
-            if current_status is None:
+            order_row = order_data.one_or_none()
+            if order_row is None:
                 raise OrderNotFoundError()
+            current_status, current_performer_id = order_row
+            if current_performer_id is not None:
+                raise OrderAlreadyAcceptedError()
 
             await session.execute(
                 update(Order)
@@ -189,7 +201,9 @@ async def payment_order(order_id: int, client_id: int) -> None:
                 raise UserNotFoundError()
 
             current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+                select(Order.status)
+                .where(Order.id == order_id, Order.client_id == client_id)
+                .with_for_update()
             )
             if current_status is None:
                 raise OrderNotFoundError()
@@ -224,7 +238,9 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
                 raise UserNotFoundError()
 
             current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+                select(Order.status)
+                .where(Order.id == order_id, Order.performer_id == performer_id)
+                .with_for_update()
             )
             if current_status is None:
                 raise OrderNotFoundError()
@@ -259,7 +275,9 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
                 raise UserNotFoundError()
 
             current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+                select(Order.status)
+                .where(Order.id == order_id, Order.client_id == client_id)
+                .with_for_update()
             )
             if current_status is None:
                 raise OrderNotFoundError()
@@ -294,7 +312,9 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                 raise UserNotFoundError()
 
             current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+                select(Order.status)
+                .where(Order.id == order_id, Order.performer_id == performer_id)
+                .with_for_update()
             )
             if current_status is None:
                 raise OrderNotFoundError()
@@ -330,7 +350,7 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
 
             order_data = await session.execute(
                 select(Order.status, Order.performer_id)
-                .where(Order.id == order_id)
+                .where(Order.id == order_id, Order.client_id == client_id)
                 .with_for_update()
             )
             order_row = order_data.one_or_none()
@@ -370,7 +390,9 @@ async def client_harddecline_order(order_id: int, client_id: int) -> None:
                 raise UserNotFoundError()
 
             current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+                select(Order.status)
+                .where(Order.id == order_id, Order.client_id == client_id)
+                .with_for_update()
             )
             if current_status is None:
                 raise OrderNotFoundError()
@@ -405,7 +427,9 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
                 raise UserNotFoundError()
 
             current_status = await session.scalar(
-                select(Order.status).where(Order.id == order_id).with_for_update()
+                select(Order.status)
+                .where(Order.id == order_id, Order.performer_id == performer_id)
+                .with_for_update()
             )
             if current_status is None:
                 raise OrderNotFoundError()
@@ -429,25 +453,25 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
             )
 
 
-async def get_client_closed_orders() -> list[Order]:
+async def get_client_closed_orders(client_id: int) -> list[Order]:
     """Получаем список закрытых сделок заказчика"""
     async with AsyncSessionLocal() as session:
         result = await session.scalars(
             select(Order)
-            .where(Order.status.in_(CLOSED_ORDER_STATUSES))
+            .where(Order.status.in_(CLOSED_ORDER_STATUSES), Order.client_id == client_id)
             .order_by(Order.updated_at.desc())
         )
         return list(result.all())
 
 
-async def get_performer_closed_orders() -> list[Order]:
+async def get_performer_closed_orders(performer_id: int) -> list[Order]:
     """Получаем список закрытых сделок исполнителя"""
     async with AsyncSessionLocal() as session:
         result = await session.scalars(
             select(Order)
             .where(
                 Order.status.in_(CLOSED_ORDER_STATUSES),
-                Order.performer_id.is_not(None),
+                Order.performer_id == performer_id,
             )
             .order_by(Order.updated_at.desc())
         )

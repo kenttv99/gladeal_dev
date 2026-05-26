@@ -7,7 +7,7 @@ from api.schemas.schemas_v1 import (
     RegisterUserRequest,
     ResetPhoneNumberRequest,
 )
-from api.utils.jwt_methods import authorize_user, generate_access_token
+from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id, generate_access_token
 from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
@@ -25,7 +25,11 @@ async def register(user: RegisterUserRequest):
 
 
 @router.post("/delete-account", dependencies=[Depends(authorize_user)])
-async def delete_account(user: DeleteAccountRequest) -> dict[str, bool]:
+async def delete_account(
+    user: DeleteAccountRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    ensure_authorized_user_id(user.user_id, authorized_user_id)
     await delete_account_method(user.user_id)
     return {"success": True}
 
@@ -37,6 +41,10 @@ async def auth(user: AuthUserRequest) -> AuthUserResponse:
 
 
 @router.post("/reset-phone-number", dependencies=[Depends(authorize_user)])
-async def reset_phone_number(user: ResetPhoneNumberRequest) -> dict[str, bool]:
+async def reset_phone_number(
+    user: ResetPhoneNumberRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    ensure_authorized_user_id(user.user_id, authorized_user_id)
     await reset_phone_number_method(user.user_id, user.phone_number)
     return {"success": True}

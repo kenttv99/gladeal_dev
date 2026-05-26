@@ -21,53 +21,80 @@ from api.utils.orders_methods import (
     get_order_link,
     payment_order,
 )
+from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id
 
 
 router = APIRouter()
 
 
 @router.get("/order_link")
-async def order_link(order_id: int) -> dict[str, str]:
-    return {"link": await get_order_link(order_id)}
+async def order_link(
+    order_id: int,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, str]:
+    return {"link": await get_order_link(order_id, authorized_user_id)}
 
 @router.get("/order_info", response_model=OrderInfoResponse)
-async def order_info(order: OrderInfoRequest = Depends()):
-    return await get_order_by_slug(order.slug)
+async def order_info(
+    order: OrderInfoRequest = Depends(),
+    authorized_user_id: int = Depends(authorize_user),
+):
+    return await get_order_by_slug(order.slug, authorized_user_id)
 
 @router.get("/deals", response_model=list[OrderInfoResponse])
-async def deals():
-    return await get_active_orders_by_role(UserRoles.CLIENT)
+async def deals(authorized_user_id: int = Depends(authorize_user)):
+    return await get_active_orders_by_role(UserRoles.CLIENT, authorized_user_id)
 
 
 @router.post("/deal_create")
-async def deal_create(order: CreateOrderRequest):
+async def deal_create(
+    order: CreateOrderRequest,
+    authorized_user_id: int = Depends(authorize_user),
+):
+    ensure_authorized_user_id(order.client_id, authorized_user_id)
     return await create_order(**order.dict())
 
 
 @router.post("/deal_payment")
-async def deal_payment(order: PaymentOrderRequest) -> dict[str, bool]:
+async def deal_payment(
+    order: PaymentOrderRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    ensure_authorized_user_id(order.client_id, authorized_user_id)
     await payment_order(order.order_id, order.client_id)
     return {"success": True}
 
 
 @router.post("/deal_confirm")
-async def deal_confirm(order: ClientConfirmOrderRequest) -> dict[str, bool]:
+async def deal_confirm(
+    order: ClientConfirmOrderRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    ensure_authorized_user_id(order.client_id, authorized_user_id)
     await client_confirm_order(order.order_id, order.client_id)
     return {"success": True}
 
 
 @router.post("/deal_softdecline")
-async def deal_softdecline(order: ClientSoftDeclineOrderRequest) -> dict[str, bool]:
+async def deal_softdecline(
+    order: ClientSoftDeclineOrderRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    ensure_authorized_user_id(order.client_id, authorized_user_id)
     await client_softdecline_order(order.order_id, order.client_id)
     return {"success": True}
 
 
 @router.post("/deal_harddecline")
-async def deal_harddecline(order: ClientHardDeclineOrderRequest) -> dict[str, bool]:
+async def deal_harddecline(
+    order: ClientHardDeclineOrderRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    ensure_authorized_user_id(order.client_id, authorized_user_id)
     await client_harddecline_order(order.order_id, order.client_id)
     return {"success": True}
 
 
 @router.get("/deals_archive", response_model=list[OrderInfoResponse])
-async def deals_archive():
-    return await get_client_closed_orders()
+async def deals_archive(authorized_user_id: int = Depends(authorize_user)):
+    return await get_client_closed_orders(authorized_user_id)

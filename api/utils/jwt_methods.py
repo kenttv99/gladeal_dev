@@ -47,3 +47,8 @@ async def authorize_user(
         raise AccessDeniedError()
 
     return request_user_id
+
+
+def ensure_authorized_user_id(request_user_id: int, authorized_user_id: int) -> None:
+    if request_user_id != authorized_user_id:
+        raise AccessDeniedError()
