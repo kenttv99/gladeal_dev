@@ -1,3 +1,5 @@
+from os import getenv
+from secrets import token_urlsafe
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -7,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import MONTH_SUM_LIMIT_PER_USER
 from database.models.orders import Order
 
-from secrets import token_urlsafe
+
+DEAL_SCREEN_PATH = "active_deal"
+
 
 async def generate_order_slug(session: AsyncSession) -> str:
     while True:
@@ -16,6 +20,12 @@ async def generate_order_slug(session: AsyncSession) -> str:
         if not slug_exists:
             return slug
 
+
+def generate_order_link(slug: str) -> str:
+    base_site_link = getenv("BASE_SITE_LINK")
+    if not base_site_link:
+        raise RuntimeError("BASE_SITE_LINK is not set")
+    return f"{base_site_link.rstrip('/')}/{DEAL_SCREEN_PATH}/{slug}"
 
 
 async def check_user_month_orders_limit(

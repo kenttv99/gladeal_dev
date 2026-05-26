@@ -36,6 +36,11 @@ class MonthOrdersLimitExceededError(BaseAPIException):
     error_code = "MONTH_ORDERS_LIMIT_EXCEEDED"
 
 
+class OrderNotFoundError(BaseAPIException):
+    status_code = 404
+    error_code = "ORDER_NOT_FOUND"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"

@@ -4,9 +4,9 @@ from sqlalchemy import exists, insert, select
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates
-from api.exceptions import MonthOrdersLimitExceededError, UserNotFoundError
+from api.exceptions import MonthOrdersLimitExceededError, OrderNotFoundError, UserNotFoundError
 from api.utils.help_orders_method import check_user_month_orders_limit
-from api.utils.help_orders_method import generate_order_slug
+from api.utils.help_orders_method import generate_order_link, generate_order_slug
 from database.config import AsyncSessionLocal
 from database.models.orders import Order, OrderStatusHistory
 from database.models.users import User
@@ -20,6 +20,12 @@ async def create_order(
     violation_proof_requirements: str,
     price: Decimal,
 ) -> Order:
+    
+    """
+    Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env
+    
+    """
+
     while True:
         async with AsyncSessionLocal() as session:
             try:
@@ -63,3 +69,17 @@ async def create_order(
                 if "uq_orders_slug" in str(exc.orig):
                     continue
                 raise
+
+
+async def get_order_link(order_id: int) -> str:
+
+    """
+    Метод получает slug ордера и генерирует полноценную ссылку для перехода на страницу с информацией о сделке
+    
+    """
+
+    async with AsyncSessionLocal() as session:
+        slug = await session.scalar(select(Order.slug).where(Order.id == order_id))
+        if slug is None:
+            raise OrderNotFoundError()
+        return generate_order_link(slug)

@@ -1,13 +1,18 @@
 from fastapi import APIRouter
 
+from api.utils.orders_methods import get_order_link
+
 
 router = APIRouter()
 
 
 @router.get("/order_link")
-async def order_link() -> None:
-    pass
+async def order_link(order_id: int) -> dict[str, str]:
+    return {"link": await get_order_link(order_id)}
 
+@router.get("/order_info")
+async def order_info() -> None:
+    pass
 
 @router.get("/deals")
 async def deals() -> None:
