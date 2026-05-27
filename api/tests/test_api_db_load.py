@@ -30,7 +30,7 @@ USERS_CONFIG: dict[str, Any] = {
 
 REQUEST_CONFIG: dict[str, Any] = {
     # Базовый адрес уже запущенного uvicorn-сервера.
-    "base_url": "http://127.0.0.1:8000",
+    "base_url": "http://83.171.226.32:8000/",
     # HTTP-метод тестируемого API-запроса.
     "method": "GET",
     # Путь endpoint, который выполняет реальные запросы к БД.
