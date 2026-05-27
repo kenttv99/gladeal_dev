@@ -23,7 +23,7 @@ from database.models.users import User
 
 USERS_CONFIG: dict[str, Any] = {
     # ID реальных пользователей из БД.
-    "user_ids": (9,11),
+    "user_ids": (2,3),
     # Минимальное количество пользователей для запуска теста.
     "min_users": 2,
 }
