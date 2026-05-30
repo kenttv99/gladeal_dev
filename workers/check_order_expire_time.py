@@ -21,11 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 def _worker_check_allowed(now: datetime):
+    """Проверяем, можно ли воркеру повторно брать сделку в обработку."""
     check_cutoff = now - timedelta(seconds=WORKER_SLEEP_SECONDS)
     return or_(Order.checked_by_worker_at.is_(None), Order.checked_by_worker_at <= check_cutoff)
 
 
 async def _claim_order_ids(*conditions, order_by, checked_at: datetime, limit: int) -> list[int]:
+    """Атомарно выбираем сделки по условиям и фиксирует время проверки воркером."""
     candidate_ids = (
         select(Order.id)
         .where(*conditions, _worker_check_allowed(checked_at))
@@ -50,6 +52,7 @@ async def _claim_order_ids(*conditions, order_by, checked_at: datetime, limit: i
 
 
 async def claim_expired_order_ids(limit: int = EXPIRED_ORDER_BATCH_SIZE) -> dict[str, list[int]]:
+    """Получаем IDS сделок для отмены и подтверждения."""
     checked_at = datetime.now(timezone.utc)
     confirm_cutoff = checked_at - timedelta(minutes=float(EXPIRE_TIME_TO_COMNFIRM_MINUTES))
 
@@ -73,6 +76,7 @@ async def claim_expired_order_ids(limit: int = EXPIRED_ORDER_BATCH_SIZE) -> dict
 
 
 async def process_expired_orders() -> dict[str, int]:
+    """Обрабатываем просроченные сделки батчами и возвращаем количество изменений."""
     processed = {"cancle": 0, "confirm": 0}
 
     while True:
@@ -91,6 +95,7 @@ async def process_expired_orders() -> dict[str, int]:
 
 
 async def run_worker() -> None:
+    """Мейн воркер"""
     while True:
         try:
             processed = await process_expired_orders()
