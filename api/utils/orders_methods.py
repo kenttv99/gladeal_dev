@@ -43,7 +43,7 @@ CLOSED_ORDER_STATUSES = (
 
 def _order_status_values(status: str) -> dict[str, object]:
     values: dict[str, object] = {"status": status}
-    if status in CLOSED_ORDER_STATUSES:
+    if status == OrderStates.AWAITING_CLIENT_CONFIRMATION.value or status in CLOSED_ORDER_STATUSES:
         values["completed_at"] = func.now()
     return values
 
@@ -487,8 +487,13 @@ async def expire_order(order_id: int, act: str) -> None:
         "cancle": OrderStates.CANCLED_BY_EXPIRE_TIME.value,
         "confirm": OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
     }
+    expected_status_by_act = {
+        "cancle": OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+        "confirm": OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+    }
     new_status = status_by_act.get(act)
-    if new_status is None:
+    expected_status = expected_status_by_act.get(act)
+    if new_status is None or expected_status is None:
         raise ValidationError()
 
     async with AsyncSessionLocal() as session:
@@ -506,6 +511,9 @@ async def expire_order(order_id: int, act: str) -> None:
                 if isinstance(current_status, OrderStates)
                 else current_status
             )
+            if current_status_value != expected_status:
+                raise ValidationError()
+
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
