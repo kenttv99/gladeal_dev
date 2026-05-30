@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import exists, func, insert, select, update
@@ -50,6 +51,7 @@ async def create_order(
     result_requirements: str,
     violation_proof_requirements: str,
     price: Decimal,
+    expire_in: datetime,
 ) -> Order:
     
     """
@@ -82,6 +84,7 @@ async def create_order(
                             violation_proof_requirements=violation_proof_requirements,
                             slug=await generate_order_slug(session),
                             price=price,
+                            expire_in=expire_in,
                             status=OrderStates.AWAITING_PERFORMER.value,
                         )
                         .returning(Order)

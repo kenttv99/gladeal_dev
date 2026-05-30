@@ -27,6 +27,15 @@ class OrderStates(Enum):
     CLOSED_BY_ARBITER_TO_PERFORMER = "closed_by_arbiter_to_performer"
 
 
+
+class FirstConditionsVariants(Enum):
+
+    """
+    
+    
+    """
+
+
 class UserRoles(Enum):
     PERFORMER = "performer"
     CLIENT = "client"

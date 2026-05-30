@@ -38,6 +38,7 @@ class CreateOrderRequest(BaseModel):
     result_requirements: str
     violation_proof_requirements: str
     price: Decimal
+    expire_in: datetime
 
 
 class OrderInfoRequest(BaseModel):
@@ -59,6 +60,7 @@ class OrderInfoResponse(BaseModel):
     status: OrderStates
     created_at: datetime
     updated_at: datetime
+    expire_in: datetime
     completed_at: datetime | None
 
 
