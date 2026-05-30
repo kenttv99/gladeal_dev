@@ -1,12 +1,22 @@
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from secrets import token_urlsafe
 
 import jwt
 from fastapi import Security
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from jwt import InvalidTokenError
+from sqlalchemy import insert, select
 
-from api.config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES, JWT_ALGORITHM, JWT_SECRET_KEY
+from api.config import (
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES,
+    JWT_ALGORITHM,
+    JWT_REFRESH_TOKEN_EXPIRE_MINUTES,
+    JWT_SECRET_KEY,
+)
 from api.exceptions import AccessDeniedError, InvalidCredentialsError
+from database.config import AsyncSessionLocal
+from database.models.users import UserRefreshToken
 
 
 auth_scheme = HTTPBasic(
@@ -28,6 +38,50 @@ def generate_access_token(user_id: int) -> str:
         JWT_SECRET_KEY,
         algorithm=JWT_ALGORITHM,
     )
+
+
+def generate_refresh_token() -> str:
+    return token_urlsafe(64)
+
+
+def get_refresh_token_hash(refresh_token: str) -> str:
+    return sha256(refresh_token.encode()).hexdigest()
+
+
+async def create_refresh_token(user_id: int) -> str:
+    refresh_token = generate_refresh_token()
+    now = datetime.now(timezone.utc)
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                insert(UserRefreshToken).values(
+                    user_id=user_id,
+                    token_hash=get_refresh_token_hash(refresh_token),
+                    expires_at=now + timedelta(minutes=JWT_REFRESH_TOKEN_EXPIRE_MINUTES),
+                )
+            )
+
+    return refresh_token
+
+
+async def decode_refresh_token(refresh_token: str) -> int:
+    async with AsyncSessionLocal() as session:
+        user_id = await session.scalar(
+            select(UserRefreshToken.user_id).where(
+                UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token),
+                UserRefreshToken.expires_at > datetime.now(timezone.utc),
+            )
+        )
+
+    if user_id is None:
+        raise InvalidCredentialsError()
+
+    return user_id
+
+
+async def refresh_access_token(refresh_token: str) -> str:
+    return generate_access_token(await decode_refresh_token(refresh_token))
 
 
 async def authorize_user(

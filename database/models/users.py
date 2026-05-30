@@ -65,7 +65,7 @@ class User(Base):
 
 
 class UserRefreshToken(Base):
-    """Refresh token session bound to a user."""
+    """Refresh токен с привязкой к id пользователя"""
 
     __tablename__ = "user_refresh_tokens"
 
