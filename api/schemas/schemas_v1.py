@@ -23,6 +23,8 @@ class AuthUserRequest(BaseModel):
 
 class AuthUserResponse(BaseModel):
     access_token: str
+    refresh_token: str
+    refresh_token_expires_at: datetime
     token_type: str = "bearer"
 
 

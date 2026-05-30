@@ -5,7 +5,7 @@ from secrets import token_urlsafe
 import jwt
 from fastapi import Security
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from jwt import InvalidTokenError
+from jwt import ExpiredSignatureError, InvalidTokenError
 from sqlalchemy import insert, select
 
 from api.config import (
@@ -14,7 +14,14 @@ from api.config import (
     JWT_REFRESH_TOKEN_EXPIRE_MINUTES,
     JWT_SECRET_KEY,
 )
-from api.exceptions import AccessDeniedError, InvalidCredentialsError
+from api.exceptions import (
+    AccessDeniedError,
+    AccessTokenExpiredError,
+    InvalidAccessTokenError,
+    InvalidCredentialsError,
+    InvalidRefreshTokenError,
+    RefreshTokenExpiredError,
+)
 from database.config import AsyncSessionLocal
 from database.models.users import UserRefreshToken
 
@@ -48,9 +55,10 @@ def get_refresh_token_hash(refresh_token: str) -> str:
     return sha256(refresh_token.encode()).hexdigest()
 
 
-async def create_refresh_token(user_id: int) -> str:
+async def create_refresh_token(user_id: int) -> tuple[str, datetime]:
     refresh_token = generate_refresh_token()
     now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=JWT_REFRESH_TOKEN_EXPIRE_MINUTES)
 
     async with AsyncSessionLocal() as session:
         async with session.begin():
@@ -58,26 +66,29 @@ async def create_refresh_token(user_id: int) -> str:
                 insert(UserRefreshToken).values(
                     user_id=user_id,
                     token_hash=get_refresh_token_hash(refresh_token),
-                    expires_at=now + timedelta(minutes=JWT_REFRESH_TOKEN_EXPIRE_MINUTES),
+                    expires_at=expires_at,
                 )
             )
 
-    return refresh_token
+    return refresh_token, expires_at
 
 
 async def decode_refresh_token(refresh_token: str) -> int:
+    now = datetime.now(timezone.utc)
     async with AsyncSessionLocal() as session:
-        user_id = await session.scalar(
-            select(UserRefreshToken.user_id).where(
-                UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token),
-                UserRefreshToken.expires_at > datetime.now(timezone.utc),
+        token = await session.scalar(
+            select(UserRefreshToken).where(
+                UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token)
             )
         )
 
-    if user_id is None:
-        raise InvalidCredentialsError()
+    if token is None:
+        raise InvalidRefreshTokenError()
 
-    return user_id
+    if token.expires_at <= now:
+        raise RefreshTokenExpiredError()
+
+    return token.user_id
 
 
 async def refresh_access_token(refresh_token: str) -> str:
@@ -94,8 +105,12 @@ async def authorize_user(
         request_user_id = int(credentials.username)
         payload = jwt.decode(credentials.password, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         token_user_id = int(payload["user_id"])
-    except (KeyError, TypeError, ValueError, InvalidTokenError) as exc:
-        raise InvalidCredentialsError() from exc
+    except ExpiredSignatureError as exc:
+        raise AccessTokenExpiredError() from exc
+    except InvalidTokenError as exc:
+        raise InvalidAccessTokenError() from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise InvalidAccessTokenError() from exc
 
     if request_user_id != token_user_id:
         raise AccessDeniedError()

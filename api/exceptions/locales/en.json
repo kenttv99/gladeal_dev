@@ -7,7 +7,11 @@
   "ORDER_NOT_FOUND": "Order not found.",
   "ORDER_ALREADY_ACCEPTED": "Order cannot be declined because it has already been accepted by a performer.",
   "ORDER_SELF_EXECUTION_FORBIDDEN": "A user cannot perform their own order.",
-  "INVALID_CREDENTIALS": "Invalid email or password.",
+  "INVALID_CREDENTIALS": "Invalid authorization credentials.",
+  "INVALID_ACCESS_TOKEN": "Invalid access token.",
+  "ACCESS_TOKEN_EXPIRED": "Access token has expired.",
+  "INVALID_REFRESH_TOKEN": "Invalid refresh token.",
+  "REFRESH_TOKEN_EXPIRED": "Refresh token has expired.",
   "ACCESS_DENIED": "You do not have permission to perform this action.",
   "VALIDATION_ERROR": "Input validation failed."
 }

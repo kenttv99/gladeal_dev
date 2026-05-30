@@ -56,6 +56,26 @@ class InvalidCredentialsError(BaseAPIException):
     error_code = "INVALID_CREDENTIALS"
 
 
+class InvalidAccessTokenError(BaseAPIException):
+    status_code = 401
+    error_code = "INVALID_ACCESS_TOKEN"
+
+
+class AccessTokenExpiredError(BaseAPIException):
+    status_code = 401
+    error_code = "ACCESS_TOKEN_EXPIRED"
+
+
+class InvalidRefreshTokenError(BaseAPIException):
+    status_code = 401
+    error_code = "INVALID_REFRESH_TOKEN"
+
+
+class RefreshTokenExpiredError(BaseAPIException):
+    status_code = 401
+    error_code = "REFRESH_TOKEN_EXPIRED"
+
+
 class AccessDeniedError(BaseAPIException):
     status_code = 403
     error_code = "ACCESS_DENIED"

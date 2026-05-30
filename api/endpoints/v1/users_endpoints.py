@@ -7,7 +7,12 @@ from api.schemas.schemas_v1 import (
     RegisterUserRequest,
     ResetPhoneNumberRequest,
 )
-from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id, generate_access_token
+from api.utils.jwt_methods import (
+    authorize_user,
+    create_refresh_token,
+    ensure_authorized_user_id,
+    generate_access_token,
+)
 from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
@@ -37,7 +42,12 @@ async def delete_account(
 @router.post("/login")
 async def auth(user: AuthUserRequest) -> AuthUserResponse:
     user_id = await authenticate_user(user.phone_number)
-    return AuthUserResponse(access_token=generate_access_token(user_id))
+    refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
+    return AuthUserResponse(
+        access_token=generate_access_token(user_id),
+        refresh_token=refresh_token,
+        refresh_token_expires_at=refresh_token_expires_at,
+    )
 
 
 @router.post("/reset-phone-number", dependencies=[Depends(authorize_user)])

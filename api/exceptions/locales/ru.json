@@ -7,7 +7,11 @@
   "ORDER_NOT_FOUND": "Сделка не найдена.",
   "ORDER_ALREADY_ACCEPTED": "Невозможно отказаться от сделки: исполнитель уже принял ее к исполнению.",
   "ORDER_SELF_EXECUTION_FORBIDDEN": "Нельзя выступать исполнителем по собственной сделке.",
-  "INVALID_CREDENTIALS": "Неверный адрес электронной почты или пароль.",
+  "INVALID_CREDENTIALS": "Неверные данные авторизации.",
+  "INVALID_ACCESS_TOKEN": "Некорректный access token.",
+  "ACCESS_TOKEN_EXPIRED": "Срок действия access token истек.",
+  "INVALID_REFRESH_TOKEN": "Некорректный refresh token.",
+  "REFRESH_TOKEN_EXPIRED": "Срок действия refresh token истек.",
   "ACCESS_DENIED": "У вас нет прав для выполнения этого действия.",
   "VALIDATION_ERROR": "Ошибка валидации входных данных."
 }
