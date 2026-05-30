@@ -36,8 +36,6 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
     OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
-    OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
-    OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value
 )
 
 
@@ -477,54 +475,6 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
                     ),
                     new_status=OrderStates.OPEN_CONFLICT.value,
                     changed_by_user_id=performer_id,
-                )
-            )
-
-
-async def expire_order(order_id: int, act: str) -> None:
-    """Переводим просроченную сделку со стороны клиента/исполнителя в итоговое состояние."""
-    status_by_act = {
-        "cancle": OrderStates.CANCLED_BY_EXPIRE_TIME.value,
-        "confirm": OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
-    }
-    expected_status_by_act = {
-        "cancle": OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-        "confirm": OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
-    }
-    new_status = status_by_act.get(act)
-    expected_status = expected_status_by_act.get(act)
-    if new_status is None or expected_status is None:
-        raise ValidationError()
-
-    async with AsyncSessionLocal() as session:
-        async with session.begin():
-            current_status = await session.scalar(
-                select(Order.status)
-                .where(Order.id == order_id)
-                .with_for_update()
-            )
-            if current_status is None:
-                raise OrderNotFoundError()
-
-            current_status_value = (
-                current_status.value
-                if isinstance(current_status, OrderStates)
-                else current_status
-            )
-            if current_status_value != expected_status:
-                raise ValidationError()
-
-            await session.execute(
-                update(Order)
-                .where(Order.id == order_id)
-                .values(**_order_status_values(new_status))
-            )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=current_status_value,
-                    new_status=new_status,
-                    changed_by_user_id=None,
                 )
             )
 

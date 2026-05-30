@@ -4,14 +4,14 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, insert, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import EXPIRE_TIME_TO_COMNFIRM_MINUTES
 from api.enums.enums_v1 import OrderStates
 from api.exceptions import OrderNotFoundError, ValidationError
-from api.utils.orders_methods import expire_order
 from database.config import AsyncSessionLocal
-from database.models.orders import Order
+from database.models.orders import Order, OrderStatusHistory
 
 
 EXPIRED_ORDER_BATCH_SIZE = 1000
@@ -26,8 +26,14 @@ def _worker_check_allowed(now: datetime):
     return or_(Order.checked_by_worker_at.is_(None), Order.checked_by_worker_at <= check_cutoff)
 
 
-async def _claim_order_ids(*conditions, order_by, checked_at: datetime, limit: int) -> list[int]:
-    """Атомарно выбираем сделки по условиям и фиксирует время проверки воркером."""
+async def _claim_order_ids(
+    session: AsyncSession,
+    *conditions,
+    order_by,
+    checked_at: datetime,
+    limit: int,
+) -> list[int]:
+    """Атомарно выбираем сделки по условиям и фиксируем время проверки воркером."""
     candidate_ids = (
         select(Order.id)
         .where(*conditions, _worker_check_allowed(checked_at))
@@ -37,27 +43,30 @@ async def _claim_order_ids(*conditions, order_by, checked_at: datetime, limit: i
         .cte("candidate_orders")
     )
 
-    async with AsyncSessionLocal() as session:
-        async with session.begin():
-            return list(
-                (
-                    await session.scalars(
-                        update(Order)
-                        .where(Order.id.in_(select(candidate_ids.c.id)))
-                        .values(checked_by_worker_at=checked_at)
-                        .returning(Order.id)
-                    )
-                ).all()
-            )
+    async with session.begin():
+        return list(
+            (
+                await session.scalars(
+                    update(Order)
+                    .where(Order.id.in_(select(candidate_ids.c.id)))
+                    .values(checked_by_worker_at=checked_at)
+                    .returning(Order.id)
+                )
+            ).all()
+        )
 
 
-async def claim_expired_order_ids(limit: int = EXPIRED_ORDER_BATCH_SIZE) -> dict[str, list[int]]:
+async def claim_expired_order_ids(
+    session: AsyncSession,
+    limit: int = EXPIRED_ORDER_BATCH_SIZE,
+) -> dict[str, list[int]]:
     """Получаем IDS сделок для отмены и подтверждения."""
     checked_at = datetime.now(timezone.utc)
     confirm_cutoff = checked_at - timedelta(minutes=float(EXPIRE_TIME_TO_COMNFIRM_MINUTES))
 
     return {
         "cancle": await _claim_order_ids(
+            session,
             Order.status == OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
             Order.expire_in <= checked_at,
             order_by=(Order.expire_in,),
@@ -65,6 +74,7 @@ async def claim_expired_order_ids(limit: int = EXPIRED_ORDER_BATCH_SIZE) -> dict
             limit=limit,
         ),
         "confirm": await _claim_order_ids(
+            session,
             Order.status == OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
             Order.completed_at.is_not(None),
             Order.completed_at <= confirm_cutoff,
@@ -75,19 +85,66 @@ async def claim_expired_order_ids(limit: int = EXPIRED_ORDER_BATCH_SIZE) -> dict
     }
 
 
-async def process_expired_orders() -> dict[str, int]:
+async def expire_order(session: AsyncSession, order_id: int, act: str) -> None:
+    """Переводим просроченную сделку со стороны клиента/исполнителя в итоговое состояние."""
+    status_by_act = {
+        "cancle": OrderStates.CANCLED_BY_EXPIRE_TIME.value,
+        "confirm": OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
+    }
+    expected_status_by_act = {
+        "cancle": OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+        "confirm": OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+    }
+    new_status = status_by_act.get(act)
+    expected_status = expected_status_by_act.get(act)
+    if new_status is None or expected_status is None:
+        raise ValidationError()
+
+    async with session.begin():
+        current_status = await session.scalar(
+            select(Order.status)
+            .where(Order.id == order_id)
+            .with_for_update()
+        )
+        if current_status is None:
+            raise OrderNotFoundError()
+
+        current_status_value = (
+            current_status.value
+            if isinstance(current_status, OrderStates)
+            else current_status
+        )
+        if current_status_value != expected_status:
+            raise ValidationError()
+
+        await session.execute(
+            update(Order)
+            .where(Order.id == order_id)
+            .values(status=new_status, completed_at=func.now())
+        )
+        await session.execute(
+            insert(OrderStatusHistory).values(
+                order_id=order_id,
+                old_status=current_status_value,
+                new_status=new_status,
+                changed_by_user_id=None,
+            )
+        )
+
+
+async def process_expired_orders(session: AsyncSession) -> dict[str, int]:
     """Обрабатываем просроченные сделки батчами и возвращаем количество изменений."""
     processed = {"cancle": 0, "confirm": 0}
 
     while True:
-        expired_order_ids = await claim_expired_order_ids()
+        expired_order_ids = await claim_expired_order_ids(session)
         if not any(expired_order_ids.values()):
             return processed
 
         for act, order_ids in expired_order_ids.items():
             for order_id in order_ids:
                 try:
-                    await expire_order(order_id, act)
+                    await expire_order(session, order_id, act)
                 except (OrderNotFoundError, ValidationError):
                     logger.info("Skipped expired order %s with action %s", order_id, act)
                 else:
@@ -98,7 +155,8 @@ async def run_worker() -> None:
     """Мейн воркер"""
     while True:
         try:
-            processed = await process_expired_orders()
+            async with AsyncSessionLocal() as session:
+                processed = await process_expired_orders(session)
             logger.info(
                 "Processed expired orders: cancle=%s confirm=%s",
                 processed["cancle"],
