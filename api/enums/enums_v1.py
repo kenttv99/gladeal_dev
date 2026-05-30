@@ -11,8 +11,10 @@ class OrderStates(Enum):
     OPEN_CONFLICT - открыт спор (З6/И6)
     SUCCESSFUL_COMPLETION - успешное завершение (З7/И7)
     UNSUCCESSFUL_COMPLETION - неуспешное завершение (З8/И8)
-    CLOSED_BY_ARBITER_TO_CLIENT - закрыта арбитром в пользу клиента (З9/И9)
-    CLOSED_BY_ARBITER_TO_PERFORMER - закрыта арбитром в пользу исполнителя (З10/И10)
+    CANCLED_BY_EXPIRE_TIME_TO_CLIENT - отменена с возвратом средств заказчику(З9/И9)
+    CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER - подтверждена с переводом средств исполнителю(З10/И10)
+    CLOSED_BY_ARBITER_TO_CLIENT - закрыта арбитром в пользу клиента (З11/И11)
+    CLOSED_BY_ARBITER_TO_PERFORMER - закрыта арбитром в пользу исполнителя (З12/И12)
     """
 
     AWAITING_PERFORMER = "awaiting_performer"
@@ -23,17 +25,11 @@ class OrderStates(Enum):
     OPEN_CONFLICT = "open_conflict"
     SUCCESSFUL_COMPLETION = "successful_completion"
     UNSUCCESSFUL_COMPLETION = "unsuccessful_completion"
+    CANCLED_BY_EXPIRE_TIME = "cancled_by_expire_time_to_client"
+    CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER = "confirm_by_expire_time_to_performer"
     CLOSED_BY_ARBITER_TO_CLIENT = "closed_by_arbiter_to_client"
     CLOSED_BY_ARBITER_TO_PERFORMER = "closed_by_arbiter_to_performer"
 
-
-
-class FirstConditionsVariants(Enum):
-
-    """
-    
-    
-    """
 
 
 class UserRoles(Enum):
