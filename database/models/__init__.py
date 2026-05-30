@@ -1,5 +1,5 @@
 from .base import Base
-from .users import User
+from .users import User, UserRefreshToken
 from .orders import Order, OrderStatusHistory
 from .notifications import Notification
 
@@ -9,4 +9,5 @@ __all__ = (
     "Order",
     "OrderStatusHistory",
     "User",
+    "UserRefreshToken",
 )
