@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends
 
 from api.schemas.schemas_v1 import (
+    AccessTokenRefreshResponse,
     AuthUserRequest,
     AuthUserResponse,
     DeleteAccountRequest,
+    RefreshTokenRequest,
     RegisterUserRequest,
     ResetPhoneNumberRequest,
 )
@@ -12,6 +14,8 @@ from api.utils.jwt_methods import (
     create_refresh_token,
     ensure_authorized_user_id,
     generate_access_token,
+    refresh_access_token,
+    revoke_refresh_token,
 )
 from api.utils.users_methods import (
     authenticate_user,
@@ -48,6 +52,19 @@ async def auth(user: AuthUserRequest) -> AuthUserResponse:
         refresh_token=refresh_token,
         refresh_token_expires_at=refresh_token_expires_at,
     )
+
+
+@router.post("/access_token_refresh/")
+async def access_token_refresh(token: RefreshTokenRequest) -> AccessTokenRefreshResponse:
+    return AccessTokenRefreshResponse(
+        access_token=await refresh_access_token(token.refresh_token)
+    )
+
+
+@router.post("/logout/")
+async def logout(token: RefreshTokenRequest) -> dict[str, bool]:
+    await revoke_refresh_token(token.refresh_token)
+    return {"success": True}
 
 
 @router.post("/reset-phone-number", dependencies=[Depends(authorize_user)])

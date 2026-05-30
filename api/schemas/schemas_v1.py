@@ -28,6 +28,15 @@ class AuthUserResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class AccessTokenRefreshResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
 class ResetPhoneNumberRequest(BaseModel):
     user_id: int
     phone_number: str

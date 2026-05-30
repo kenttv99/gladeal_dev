@@ -95,6 +95,19 @@ async def refresh_access_token(refresh_token: str) -> str:
     return generate_access_token(await decode_refresh_token(refresh_token))
 
 
+async def revoke_refresh_token(refresh_token: str) -> None:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            token = await session.scalar(
+                select(UserRefreshToken).where(
+                    UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token)
+                )
+            )
+            if token is None:
+                raise InvalidRefreshTokenError()
+            await session.delete(token)
+
+
 async def authorize_user(
     credentials: HTTPBasicCredentials | None = Security(auth_scheme),
 ) -> int:
