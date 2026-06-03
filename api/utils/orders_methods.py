@@ -124,11 +124,11 @@ async def get_order_link(order_id: int, client_id: int) -> str:
         return generate_order_link(slug)
 
 
-async def get_order_by_slug(slug: str, client_id: int) -> Order:
+async def get_order_by_slug(slug: str, authorized_user_id: int) -> Order:
     """Достаем информацию об ордере по слагу"""
     async with AsyncSessionLocal() as session:
         order = await session.scalar(
-            select(Order).where(Order.slug == slug, Order.client_id == client_id)
+            select(Order).where(Order.slug == slug)
         )
         if order is None:
             raise OrderNotFoundError()
