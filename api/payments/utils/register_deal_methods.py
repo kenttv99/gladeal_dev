@@ -14,10 +14,7 @@ from api.exceptions import (
 from api.payments.auth_methods import build_signature, is_valid_signature
 from api.payments.config import PAYGINE_SECTOR
 from api.payments.http_client import get_paygine_client
-from api.schemas.schemas_v1 import (
-    RegisterDealPaymentRequest,
-    RegisterDealPaymentResponse,
-)
+from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 from database.config import AsyncSessionLocal
 from database.models.payments import OrderPaymentData
 
@@ -28,10 +25,10 @@ REGISTER_DEAL_SIGNATURE_FIELDS = ("sector", "amount", "currency")
 
 async def create_registered_deal(
     data: RegisterDealPaymentRequest,
-) -> RegisterDealPaymentResponse:
+) -> dict[str, object]:
     """Регистрируем сделку в ПЦ и сохраняем платежные данные сделки."""
     response = await send_register_deal_request(data)
-    await save_order_payment_data(data, response.paygine_order_id)
+    await save_order_payment_data(data, str(response["paygine_order_id"]))
     return response
 
 
@@ -64,7 +61,7 @@ def build_register_deal_payload(
 
 async def send_register_deal_request(
     data: RegisterDealPaymentRequest,
-) -> RegisterDealPaymentResponse:
+) -> dict[str, object]:
     """Отправляем запрос регистрации заказа в ПЦ Paygine."""
     payload = build_register_deal_payload(data)
     raw_response = await post_register_deal(payload)
@@ -76,14 +73,14 @@ async def send_register_deal_request(
     if not paygine_order_id:
         raise PaymentInvalidProviderResponseError()
 
-    return RegisterDealPaymentResponse(
-        paygine_order_id=paygine_order_id,
-        signature=str(payload["signature"]),
-        customer_ref=data.customer.client_ref,
-        performer_ref=data.performer.client_ref,
-        response_data=response_data,
-        raw_response=raw_response,
-    )
+    return {
+        "paygine_order_id": paygine_order_id,
+        "signature": str(payload["signature"]),
+        "customer_ref": data.customer.client_ref,
+        "performer_ref": data.performer.client_ref,
+        "response_data": response_data,
+        "raw_response": raw_response,
+    }
 
 
 async def save_order_payment_data(

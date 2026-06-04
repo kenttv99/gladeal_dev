@@ -146,10 +146,10 @@ class RegisterDealPaymentRequest(BaseModel):
     mode: int = 0
 
 
-class RegisterDealPaymentResponse(BaseModel):
-    paygine_order_id: str
-    signature: str
-    customer_ref: str
-    performer_ref: str
-    response_data: dict[str, str]
-    raw_response: str
+# class RegisterDealPaymentResponse(BaseModel):
+#     paygine_order_id: str
+#     signature: str
+#     customer_ref: str
+#     performer_ref: str
+#     response_data: dict[str, str]
+#     raw_response: str
