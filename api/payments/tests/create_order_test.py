@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -23,15 +24,14 @@ REAL_REGISTER_DEAL_DATA = {
             "email": "performer@example.com",
             "phone": "79000000002",
         },
-        "amount": 10000,
+        "amount": 100000,
         "service_fee_amount": Decimal("500.00"),
         "customer_payment_amount": Decimal("10500.00"),
         "performer_payout_amount": Decimal("10000.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Оплата тестовой сделки",
         "currency": 643,
-        "fee": 500,
-        "mode": 1,
+        "fee": 5000,
     },
     "reference_prefix": "real-paygine-register-deal",
 }
@@ -50,6 +50,8 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
             response = await register_deal(payment_data)
         except PaymentInvalidProviderResponseError as exc:
             self.fail(f"Paygine register response parse error: {exc.details}")
+
+        print(json.dumps(response, ensure_ascii=False, indent=2))
 
         self.assertIn("root_tag", response)
         self.assertIn("data", response)
