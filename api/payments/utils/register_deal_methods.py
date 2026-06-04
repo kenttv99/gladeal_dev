@@ -1,62 +1,49 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from decimal import Decimal
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
+from sqlalchemy import insert
+
+from api.enums.enums_v1 import OrderPaymentStates
 from api.payments.auth_methods import build_signature, is_valid_signature
 from api.payments.config import (
     PAYGINE_BASE_URL,
     PAYGINE_REQUEST_TIMEOUT_SECONDS,
     PAYGINE_SECTOR,
 )
+from api.schemas.schemas_v1 import (
+    RegisterDealPaymentRequest,
+    RegisterDealPaymentResponse,
+)
+from database.config import AsyncSessionLocal
+from database.models.payments import OrderPaymentData
 
 
 REGISTER_DEAL_ENDPOINT = "/webapi/Register"
 REGISTER_DEAL_SIGNATURE_FIELDS = ("sector", "amount", "currency")
 
 
-@dataclass(frozen=True)
-class DealParticipant:
-    client_ref: str
-    email: str | None = None
-    phone: str | None = None
-
-
-@dataclass(frozen=True)
-class RegisterDealRequest:
-    customer: DealParticipant
-    performer: DealParticipant
-    amount: int
-    reference: str
-    description: str
-    currency: int = 643
-    fee: int | None = None
-    url: str | None = None
-    failurl: str | None = None
-    life_period: int | None = None
-    sd_ref: str | None = None
-    notify_url: str | None = None
-    mode: int = 0
-
-
-@dataclass(frozen=True)
-class RegisterDealResponse:
-    paygine_order_id: str | None
-    signature: str
-    customer_ref: str
-    performer_ref: str
-    response_data: dict[str, str]
-    raw_response: str
-
-
 class RegisterDealError(RuntimeError):
     pass
 
 
-def build_register_deal_payload(data: RegisterDealRequest) -> dict[str, object]:
+async def create_registered_deal(
+    data: RegisterDealPaymentRequest,
+) -> RegisterDealPaymentResponse:
+    """Регистрируем сделку в ПЦ и сохраняем платежные данные сделки."""
+    response = await send_register_deal_request(data)
+    await save_order_payment_data(data, response.paygine_order_id)
+    return response
+
+
+def build_register_deal_payload(
+    data: RegisterDealPaymentRequest,
+) -> dict[str, object]:
+    """Собираем form-urlencoded payload для webapi/Register."""
     payload = {
         "sector": PAYGINE_SECTOR,
         "amount": data.amount,
@@ -81,8 +68,9 @@ def build_register_deal_payload(data: RegisterDealRequest) -> dict[str, object]:
 
 
 async def send_register_deal_request(
-    data: RegisterDealRequest,
-) -> RegisterDealResponse:
+    data: RegisterDealPaymentRequest,
+) -> RegisterDealPaymentResponse:
+    """Отправляем запрос регистрации заказа в ПЦ Paygine."""
     payload = build_register_deal_payload(data)
     raw_response = await asyncio.to_thread(_post_register_deal, payload)
     response_data = _parse_response(raw_response)
@@ -93,7 +81,7 @@ async def send_register_deal_request(
     if not paygine_order_id:
         raise RegisterDealError(raw_response)
 
-    return RegisterDealResponse(
+    return RegisterDealPaymentResponse(
         paygine_order_id=paygine_order_id,
         signature=str(payload["signature"]),
         customer_ref=data.customer.client_ref,
@@ -103,7 +91,32 @@ async def send_register_deal_request(
     )
 
 
+async def save_order_payment_data(
+    data: RegisterDealPaymentRequest,
+    paygine_order_id: str,
+) -> None:
+    """Сохраняем платежные данные зарегистрированной сделки в БД."""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                insert(OrderPaymentData).values(
+                    order_id=data.order_id,
+                    customer_email=data.customer.email,
+                    performer_email=data.performer.email,
+                    currency=data.currency,
+                    order_amount=Decimal(data.amount) / Decimal("100"),
+                    service_fee_amount=data.service_fee_amount,
+                    customer_payment_amount=data.customer_payment_amount,
+                    performer_payout_amount=data.performer_payout_amount,
+                    status=OrderPaymentStates.CREATED.value,
+                    paygine_order_id=paygine_order_id,
+                    expires_at=data.expires_at,
+                )
+            )
+
+
 def _post_register_deal(payload: dict[str, object]) -> str:
+    """Выполняем синхронный HTTP POST к webapi/Register."""
     request = Request(
         f"{PAYGINE_BASE_URL}{REGISTER_DEAL_ENDPOINT}",
         data=urlencode(payload).encode("utf-8"),
@@ -119,6 +132,7 @@ def _post_register_deal(payload: dict[str, object]) -> str:
 
 
 def _parse_response(raw_response: str) -> dict[str, str]:
+    """Парсим и проверяем ответ webapi/Register."""
     if not raw_response.lstrip().startswith("<"):
         return {}
 
