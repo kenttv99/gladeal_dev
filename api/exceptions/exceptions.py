@@ -84,3 +84,17 @@ class AccessDeniedError(BaseAPIException):
 class ValidationError(BaseAPIException):
     status_code = 422
     error_code = "VALIDATION_ERROR"
+
+
+###
+# Исключения платежных методов
+###
+
+class PaymentInvalidProviderResponseError(BaseAPIException):
+    status_code = 502
+    error_code = "PAYMENT_INVALID_PROVIDER_RESPONSE"
+
+
+class PaymentInvalidProviderSignatureError(BaseAPIException):
+    status_code = 502
+    error_code = "PAYMENT_INVALID_PROVIDER_SIGNATURE"

@@ -13,5 +13,9 @@
   "INVALID_REFRESH_TOKEN": "Invalid refresh token.",
   "REFRESH_TOKEN_EXPIRED": "Refresh token has expired.",
   "ACCESS_DENIED": "You do not have permission to perform this action.",
-  "VALIDATION_ERROR": "Input validation failed."
+  "VALIDATION_ERROR": "Input validation failed.",
+  "PAYMENT_REGISTER_DEAL_FAILED": "Failed to register the payment deal.",
+  "PAYMENT_INVALID_PROVIDER_RESPONSE": "The payment provider returned an invalid response.",
+  "PAYMENT_INVALID_PROVIDER_SIGNATURE": "The payment provider response signature is invalid.",
+  "PAYMENT_DATA_SAVE_FAILED": "Failed to save payment data."
 }

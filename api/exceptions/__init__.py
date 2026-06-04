@@ -14,6 +14,8 @@ from api.exceptions.exceptions import (
     RefreshTokenExpiredError,
     AccessDeniedError,
     ValidationError,
+    PaymentInvalidProviderResponseError,
+    PaymentInvalidProviderSignatureError,
 )
 from api.exceptions.handler import register_exception_handlers
 
@@ -33,5 +35,7 @@ __all__ = [
     "RefreshTokenExpiredError",
     "AccessDeniedError",
     "ValidationError",
+    "PaymentInvalidProviderResponseError",
+    "PaymentInvalidProviderSignatureError",
     "register_exception_handlers",
 ]
