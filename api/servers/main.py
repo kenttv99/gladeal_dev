@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -6,15 +8,24 @@ from api.endpoints.v1.order_client_endpoints import router as order_client_route
 from api.endpoints.v1.order_performer_endpoints import router as order_performer_router
 from api.endpoints.v1.users_endpoints import router as users_router
 from api.exceptions import register_exception_handlers
+from api.payments.http_client import close_paygine_client
 from api.utils.jwt_methods import authorize_user
 
 
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Закрываем внешние async-клиенты при остановке приложения."""
+    yield
+    await close_paygine_client()
+
+
 app = FastAPI(
     title='GLADEAL API',
     description='API для взаимодействия с backend',
-    version='1.0.0'
+    version='1.0.0',
+    lifespan=lifespan,
 )
 
 # CORS middleware

@@ -7,3 +7,4 @@ alembic
 python-dotenv
 psycopg2-binary
 asyncpg
+httpx

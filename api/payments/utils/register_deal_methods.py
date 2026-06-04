@@ -1,20 +1,15 @@
 from __future__ import annotations
 
-import asyncio
 from decimal import Decimal
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
+import httpx
 from sqlalchemy import insert
 
 from api.enums.enums_v1 import OrderPaymentStates
 from api.payments.auth_methods import build_signature, is_valid_signature
-from api.payments.config import (
-    PAYGINE_BASE_URL,
-    PAYGINE_REQUEST_TIMEOUT_SECONDS,
-    PAYGINE_SECTOR,
-)
+from api.payments.config import PAYGINE_SECTOR
+from api.payments.http_client import get_paygine_client
 from api.schemas.schemas_v1 import (
     RegisterDealPaymentRequest,
     RegisterDealPaymentResponse,
@@ -72,7 +67,7 @@ async def send_register_deal_request(
 ) -> RegisterDealPaymentResponse:
     """Отправляем запрос регистрации заказа в ПЦ Paygine."""
     payload = build_register_deal_payload(data)
-    raw_response = await asyncio.to_thread(_post_register_deal, payload)
+    raw_response = await post_register_deal(payload)
     response_data = _parse_response(raw_response)
     paygine_order_id = response_data.get("id") or (
         raw_response.strip() if data.mode == 1 else None
@@ -115,20 +110,18 @@ async def save_order_payment_data(
             )
 
 
-def _post_register_deal(payload: dict[str, object]) -> str:
-    """Выполняем синхронный HTTP POST к webapi/Register."""
-    request = Request(
-        f"{PAYGINE_BASE_URL}{REGISTER_DEAL_ENDPOINT}",
-        data=urlencode(payload).encode("utf-8"),
-        method="POST",
-        headers={
-            "Accept": "*/*",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        },
-    )
-    with urlopen(request, timeout=PAYGINE_REQUEST_TIMEOUT_SECONDS) as response:
-        charset = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(charset, errors="replace")
+async def post_register_deal(payload: dict[str, object]) -> str:
+    """Выполняем асинхронный HTTP POST к webapi/Register."""
+    try:
+        response = await get_paygine_client().post(
+            REGISTER_DEAL_ENDPOINT,
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise RegisterDealError(str(exc)) from exc
+    return response.text
 
 
 def _parse_response(raw_response: str) -> dict[str, str]:
