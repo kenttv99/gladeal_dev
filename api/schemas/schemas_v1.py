@@ -137,3 +137,7 @@ class RegisterDealPaymentRequest(BaseModel):
     description: str
     currency: int = 643
     fee: int | None = None
+
+
+class CancleUnpaymentDealRequest(BaseModel):
+    paygine_order_id: int
