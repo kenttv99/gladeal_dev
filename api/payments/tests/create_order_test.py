@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import uuid4
 from unittest.mock import patch
 
+from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.payments_methods import register_deal
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
@@ -62,18 +63,27 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
             "api.payments.utils.register_deal_methods.save_order_payment_data",
             new=skip_payment_data_save,
         ):
-            response = await register_deal(payment_data)
+            try:
+                response = await register_deal(payment_data)
+            except PaymentInvalidProviderResponseError as exc:
+                self.fail(f"Paygine register response error: {exc.details}")
 
-        self.assertTrue(response["paygine_order_id"])
+        paygine_order_id = response["paygine_order_id"]
+        raw_response = response["raw_response"]
+
+        if not isinstance(paygine_order_id, str) or not isinstance(raw_response, str):
+            self.fail("Paygine register response has invalid field types")
+
+        self.assertTrue(paygine_order_id)
         self.assertEqual(response["customer_ref"], payment_data.customer.client_ref)
         self.assertEqual(response["performer_ref"], payment_data.performer.client_ref)
-        self.assertIn(response["paygine_order_id"], response["raw_response"])
+        self.assertIn(paygine_order_id, raw_response)
         self.assertEqual(
             saved_payment_calls,
             [
                 {
                     "order_id": payment_data.order_id,
-                    "paygine_order_id": response["paygine_order_id"],
+                    "paygine_order_id": paygine_order_id,
                 }
             ],
         )

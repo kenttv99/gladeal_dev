@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from xml.etree import ElementTree
 
 from sqlalchemy import insert
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,6 +13,12 @@ from api.exceptions import (
 from api.payments.auth_methods import build_signature, is_valid_signature
 from api.payments.config import PAYGINE_SECTOR
 from api.payments.http_client import get_paygine_client
+from api.payments.utils.xml_response_parser import (
+    XML_TEXT_ROOT,
+    XML_TEXT_VALUE_KEY,
+    parse_paygine_response,
+    xml_leaf_values,
+)
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 from database.config import AsyncSessionLocal
 from database.models.payments import OrderPaymentData
@@ -21,7 +26,6 @@ from database.models.payments import OrderPaymentData
 
 REGISTER_DEAL_ENDPOINT = "/webapi/Register"
 REGISTER_DEAL_SIGNATURE_FIELDS = ("sector", "amount", "currency")
-PROVIDER_RESPONSE_PREVIEW_LENGTH = 1000
 
 
 async def create_registered_deal(
@@ -66,12 +70,8 @@ async def send_register_deal_request(
     """Отправляем запрос регистрации заказа в ПЦ Paygine."""
     payload = build_register_deal_payload(data)
     raw_response = await post_register_deal(payload)
-    response_data = (
-        {"id": raw_response.strip()}
-        if data.mode == 1 and _is_plain_order_id(raw_response)
-        else _parse_response(raw_response)
-    )
-    paygine_order_id = response_data.get("id") or response_data.get("order_id")
+    response_data = get_register_deal_response_data(raw_response, data.mode)
+    paygine_order_id = response_data.get("id")
 
     if not paygine_order_id:
         raise PaymentInvalidProviderResponseError(details=response_data)
@@ -130,40 +130,56 @@ async def post_register_deal(payload: dict[str, object]) -> str:
     return response.text
 
 
-def _parse_response(raw_response: str) -> dict[str, str]:
-    """Парсим и проверяем ответ webapi/Register."""
-    response = raw_response.strip().lstrip("\ufeff")
-    if not response.startswith("<"):
-        raise PaymentInvalidProviderResponseError(
-            details={"raw_response": response[:PROVIDER_RESPONSE_PREVIEW_LENGTH]}
-        )
+def get_register_deal_response_data(
+    raw_response: str,
+    mode: int,
+) -> dict[str, object]:
+    """Получаем данные успешного ответа webapi/Register."""
+    response = parse_paygine_response(raw_response)
+    root_tag = response["root_tag"]
+    response_data = response["data"]
 
-    root = ElementTree.fromstring(response)
-    data = {_xml_tag_name(child.tag): child.text or "" for child in root}
+    if root_tag == XML_TEXT_ROOT:
+        return _get_register_deal_text_data(response_data, mode)
 
-    if _xml_tag_name(root.tag) != "order":
-        raise PaymentInvalidProviderResponseError(
-            details={
-                "root_tag": _xml_tag_name(root.tag),
-                "response_data": data,
-                "raw_response": response[:PROVIDER_RESPONSE_PREVIEW_LENGTH],
-            }
-        )
+    if not isinstance(response_data, dict):
+        raise PaymentInvalidProviderResponseError(details=response)
 
-    if data.get("signature") and not is_valid_signature(
-        (child.text or "" for child in root if _xml_tag_name(child.tag) != "signature"),
-        data["signature"],
+    if root_tag == "error":
+        raise PaymentInvalidProviderResponseError(details=response_data)
+
+    if root_tag != "order":
+        raise PaymentInvalidProviderResponseError(details=response)
+
+    _validate_register_deal_signature(response_data)
+    return response_data
+
+
+def _get_register_deal_text_data(
+    response_data: object,
+    mode: int,
+) -> dict[str, object]:
+    """Получаем данные plain text ответа webapi/Register."""
+    order_id = (
+        response_data.get(XML_TEXT_VALUE_KEY)
+        if isinstance(response_data, dict)
+        else None
+    )
+
+    if mode == 1 and isinstance(order_id, str) and order_id.isdigit():
+        return {"id": order_id}
+
+    raise PaymentInvalidProviderResponseError(details=response_data)
+
+
+def _validate_register_deal_signature(response_data: dict[str, object]) -> None:
+    """Проверяем подпись XML-ответа webapi/Register."""
+    signature = response_data.get("signature")
+    if not isinstance(signature, str) or not signature:
+        return
+
+    if not is_valid_signature(
+        xml_leaf_values(response_data, excluded_keys={"signature"}),
+        signature,
     ):
         raise PaymentInvalidProviderSignatureError()
-
-    return data
-
-
-def _is_plain_order_id(raw_response: str) -> bool:
-    """Проверяем, что ответ mode=1 содержит только id заказа."""
-    return raw_response.strip().isdigit()
-
-
-def _xml_tag_name(tag: str) -> str:
-    """Возвращаем имя XML-тега без namespace."""
-    return tag.rsplit("}", 1)[-1].lower()
