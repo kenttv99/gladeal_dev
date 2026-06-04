@@ -21,6 +21,7 @@ from database.models.payments import OrderPaymentData
 
 REGISTER_DEAL_ENDPOINT = "/webapi/Register"
 REGISTER_DEAL_SIGNATURE_FIELDS = ("sector", "amount", "currency")
+PROVIDER_RESPONSE_PREVIEW_LENGTH = 1000
 
 
 async def create_registered_deal(
@@ -65,13 +66,15 @@ async def send_register_deal_request(
     """Отправляем запрос регистрации заказа в ПЦ Paygine."""
     payload = build_register_deal_payload(data)
     raw_response = await post_register_deal(payload)
-    response_data = _parse_response(raw_response)
-    paygine_order_id = response_data.get("id") or (
-        raw_response.strip() if data.mode == 1 else None
+    response_data = (
+        {"id": raw_response.strip()}
+        if data.mode == 1 and _is_plain_order_id(raw_response)
+        else _parse_response(raw_response)
     )
+    paygine_order_id = response_data.get("id") or response_data.get("order_id")
 
     if not paygine_order_id:
-        raise PaymentInvalidProviderResponseError()
+        raise PaymentInvalidProviderResponseError(details=response_data)
 
     return {
         "paygine_order_id": paygine_order_id,
@@ -129,19 +132,38 @@ async def post_register_deal(payload: dict[str, object]) -> str:
 
 def _parse_response(raw_response: str) -> dict[str, str]:
     """Парсим и проверяем ответ webapi/Register."""
-    if not raw_response.lstrip().startswith("<"):
-        return {}
+    response = raw_response.strip().lstrip("\ufeff")
+    if not response.startswith("<"):
+        raise PaymentInvalidProviderResponseError(
+            details={"raw_response": response[:PROVIDER_RESPONSE_PREVIEW_LENGTH]}
+        )
 
-    root = ElementTree.fromstring(raw_response)
-    data = {child.tag: child.text or "" for child in root}
+    root = ElementTree.fromstring(response)
+    data = {_xml_tag_name(child.tag): child.text or "" for child in root}
 
-    if root.tag.lower() != "order":
-        raise PaymentInvalidProviderResponseError()
+    if _xml_tag_name(root.tag) != "order":
+        raise PaymentInvalidProviderResponseError(
+            details={
+                "root_tag": _xml_tag_name(root.tag),
+                "response_data": data,
+                "raw_response": response[:PROVIDER_RESPONSE_PREVIEW_LENGTH],
+            }
+        )
 
     if data.get("signature") and not is_valid_signature(
-        (child.text or "" for child in root if child.tag != "signature"),
+        (child.text or "" for child in root if _xml_tag_name(child.tag) != "signature"),
         data["signature"],
     ):
         raise PaymentInvalidProviderSignatureError()
 
     return data
+
+
+def _is_plain_order_id(raw_response: str) -> bool:
+    """Проверяем, что ответ mode=1 содержит только id заказа."""
+    return raw_response.strip().isdigit()
+
+
+def _xml_tag_name(tag: str) -> str:
+    """Возвращаем имя XML-тега без namespace."""
+    return tag.rsplit("}", 1)[-1].lower()

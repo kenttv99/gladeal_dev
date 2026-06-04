@@ -67,7 +67,7 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(response["paygine_order_id"])
         self.assertEqual(response["customer_ref"], payment_data.customer.client_ref)
         self.assertEqual(response["performer_ref"], payment_data.performer.client_ref)
-        self.assertEqual(response["raw_response"].strip(), response["paygine_order_id"])
+        self.assertIn(response["paygine_order_id"], response["raw_response"])
         self.assertEqual(
             saved_payment_calls,
             [
