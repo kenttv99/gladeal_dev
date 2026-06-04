@@ -37,6 +37,17 @@ class UserRoles(Enum):
     CLIENT = "client"
 
 
+class OrderPaymentStates(Enum):
+    CREATED = "created"
+    PAYMENT_LINK_CREATED = "payment_link_created"
+    FUNDS_FROZEN = "funds_frozen"
+    PAYOUT_LINK_CREATED = "payout_link_created"
+    PAYOUT_COMPLETED = "payout_completed"
+    REFUNDED = "refunded"
+    REVOKED = "revoked"
+    FAILED = "failed"
+
+
 ###
 # Набросок для уведомлений
 ###

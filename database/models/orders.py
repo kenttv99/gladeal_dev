@@ -12,6 +12,7 @@ from api.enums.enums_v1 import OrderStates
 from .base import Base, enum_column
 
 if TYPE_CHECKING:
+    from .payments import OrderPaymentData
     from .users import User
 
 
@@ -83,6 +84,12 @@ class Order(Base):
         "OrderStatusHistory",
         back_populates="order",
         cascade="all, delete-orphan",
+    )
+    payment_data: Mapped["OrderPaymentData | None"] = relationship(
+        "OrderPaymentData",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
