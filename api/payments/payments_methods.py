@@ -5,7 +5,7 @@ from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 async def register_deal(
     payment_data: RegisterDealPaymentRequest,
 ) -> dict[str, object]:
-    """Регистрируем платежную сделку в ПЦ и сохраняем ее платежные данные."""
+    """Регистрируем платежную сделку в ПЦ и возвращаем ответ провайдера."""
     return await create_registered_deal(payment_data)
 
 

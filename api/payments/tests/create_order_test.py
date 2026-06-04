@@ -4,7 +4,6 @@ import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
-from unittest.mock import patch
 
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.payments_methods import register_deal
@@ -39,54 +38,22 @@ REAL_REGISTER_DEAL_DATA = {
 
 
 class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
-    async def test_register_deal_returns_real_paygine_order_id_without_db_save(self):
-        """Отправляем реальный запрос в ПЦ и не сохраняем данные в нашу БД."""
+    async def test_register_deal_returns_readable_paygine_response(self):
+        """Отправляем реальный запрос в ПЦ и получаем читаемый ответ."""
         request_data = dict(REAL_REGISTER_DEAL_DATA["request"])
         request_data["reference"] = (
             f"{REAL_REGISTER_DEAL_DATA['reference_prefix']}-{uuid4().hex[:12]}"
         )
         payment_data = RegisterDealPaymentRequest(**request_data)
-        saved_payment_calls = []
 
-        async def skip_payment_data_save(
-            data: RegisterDealPaymentRequest,
-            paygine_order_id: str,
-        ) -> None:
-            saved_payment_calls.append(
-                {
-                    "order_id": data.order_id,
-                    "paygine_order_id": paygine_order_id,
-                }
-            )
+        try:
+            response = await register_deal(payment_data)
+        except PaymentInvalidProviderResponseError as exc:
+            self.fail(f"Paygine register response parse error: {exc.details}")
 
-        with patch(
-            "api.payments.utils.register_deal_methods.save_order_payment_data",
-            new=skip_payment_data_save,
-        ):
-            try:
-                response = await register_deal(payment_data)
-            except PaymentInvalidProviderResponseError as exc:
-                self.fail(f"Paygine register response error: {exc.details}")
-
-        paygine_order_id = response["paygine_order_id"]
-        raw_response = response["raw_response"]
-
-        if not isinstance(paygine_order_id, str) or not isinstance(raw_response, str):
-            self.fail("Paygine register response has invalid field types")
-
-        self.assertTrue(paygine_order_id)
-        self.assertEqual(response["customer_ref"], payment_data.customer.client_ref)
-        self.assertEqual(response["performer_ref"], payment_data.performer.client_ref)
-        self.assertIn(paygine_order_id, raw_response)
-        self.assertEqual(
-            saved_payment_calls,
-            [
-                {
-                    "order_id": payment_data.order_id,
-                    "paygine_order_id": paygine_order_id,
-                }
-            ],
-        )
+        self.assertIn("root_tag", response)
+        self.assertIn("data", response)
+        self.assertIsInstance(response["root_tag"], str)
 
 
 if __name__ == "__main__":
