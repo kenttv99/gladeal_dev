@@ -119,7 +119,7 @@ class PerformerConflictOrderRequest(BaseModel):
 # Платежные схемы
 ###
 
-class PaymentParticipant(BaseModel):
+class RegisterDealCustomer(BaseModel):
     client_ref: str
     email: str
     phone: str | None = None
@@ -127,8 +127,7 @@ class PaymentParticipant(BaseModel):
 
 class RegisterDealPaymentRequest(BaseModel):
     order_id: int
-    customer: PaymentParticipant
-    performer: PaymentParticipant
+    customer: RegisterDealCustomer
     amount: int
     service_fee_amount: Decimal
     customer_payment_amount: Decimal
@@ -138,18 +137,3 @@ class RegisterDealPaymentRequest(BaseModel):
     description: str
     currency: int = 643
     fee: int | None = None
-    url: str | None = None
-    failurl: str | None = None
-    life_period: int | None = None
-    sd_ref: str | None = None
-    notify_url: str | None = None
-    mode: int = 0
-
-
-# class RegisterDealPaymentResponse(BaseModel):
-#     paygine_order_id: str
-#     signature: str
-#     customer_ref: str
-#     performer_ref: str
-#     response_data: dict[str, str]
-#     raw_response: str

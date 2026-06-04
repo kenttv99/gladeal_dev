@@ -32,12 +32,6 @@ def build_register_deal_payload(
         "email": data.customer.email,
         "phone": data.customer.phone,
         "fee": data.fee,
-        "url": data.url,
-        "failurl": data.failurl,
-        "life_period": data.life_period,
-        "sd_ref": data.sd_ref,
-        "notify_url": data.notify_url,
-        "mode": data.mode,
     }
     payload["signature"] = build_signature(
         payload[field] for field in REGISTER_DEAL_SIGNATURE_FIELDS
@@ -56,7 +50,8 @@ async def send_register_deal_request(
 
 async def post_register_deal(payload: dict[str, object]) -> str:
     """Выполняем асинхронный HTTP POST к webapi/Register."""
-    response = await get_paygine_client().post(
+    client = get_paygine_client()
+    response = await client.post(
         REGISTER_DEAL_ENDPOINT,
         data=payload,
         headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
