@@ -1,9 +1,11 @@
 from api.payments.utils.cancle_unpayment_deal_methods import cancle_registered_deal
 from api.payments.utils.generate_payment_link_methods import create_payment_link
+from api.payments.utils.generate_withdrow_link_methods import create_withdrow_link
 from api.payments.utils.register_deal_methods import create_registered_deal
 from api.schemas.schemas_v1 import (
     CancleUnpaymentDealRequest,
     GeneratePaymentLinkRequest,
+    GenerateWithdrowLinkRequest,
     RegisterDealPaymentRequest,
 )
 
@@ -29,16 +31,14 @@ async def generate_payment_link(
     return await create_payment_link(payment_data)
 
 
-async def withdraw_to_performer() -> None:
-    """Создаем выплату средств исполнителю."""
-    pass
+async def generate_withdrow_link(
+    payment_data: GenerateWithdrowLinkRequest,
+) -> str:
+    """Генерируем ссылку для получения средств исполнителем"""
+    return await create_withdrow_link(payment_data)
 
 async def refund_money() -> None:
     """Возвращаем средства заказчику."""
-    pass
-
-async def revoke_deal() -> None:
-    """Отзываем платежную сделку."""
     pass
 
 async def calculate_commissions() -> None:

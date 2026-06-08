@@ -145,3 +145,7 @@ class CancleUnpaymentDealRequest(BaseModel):
 
 class GeneratePaymentLinkRequest(BaseModel):
     paygine_order_id: int
+
+
+class GenerateWithdrowLinkRequest(BaseModel):
+    paygine_order_id: int
