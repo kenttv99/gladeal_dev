@@ -149,3 +149,7 @@ class GeneratePaymentLinkRequest(BaseModel):
 
 class GenerateWithdrowLinkRequest(BaseModel):
     paygine_order_id: int
+
+
+class CompletePaymentedDealRequest(BaseModel):
+    paygine_order_id: int
