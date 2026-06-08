@@ -8,7 +8,7 @@ from api.schemas.schemas_v1 import GenerateWithdrowLinkRequest
 
 
 GENERATE_WITHDROW_LINK_ENDPOINT = "/webapi/b2puser/sd-services/SDPayOutPage"
-GENERATE_WITHDROW_LINK_SIGNATURE_FIELDS = ("sector", "id")
+GENERATE_WITHDROW_LINK_SIGNATURE_FIELDS = ("sector", "id", "sd_ref")
 
 
 async def create_withdrow_link(
@@ -23,10 +23,11 @@ async def create_withdrow_link(
 def build_generate_withdrow_link_payload(
     data: GenerateWithdrowLinkRequest,
 ) -> dict[str, object]:
-    """Собираем query params для SDComplete."""
+    """Собираем query params для SDPayOutPage."""
     payload = {
         "sector": PAYGINE_SECTOR,
         "id": data.paygine_order_id,
+        "sd_ref": data.sd_ref,
     }
     payload["signature"] = build_signature(
         payload[field] for field in GENERATE_WITHDROW_LINK_SIGNATURE_FIELDS
