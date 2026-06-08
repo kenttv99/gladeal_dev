@@ -13,9 +13,9 @@ from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
 REAL_REGISTER_DEAL_DATA = {
     "request": {
-        "order_id": 101,
+        "order_id": 102,
         "customer": {
-            "client_ref": "test-customer-101",
+            "client_ref": "test-customer-102",
             "email": "customer@example.com",
             "phone": "79000000001",
         },
