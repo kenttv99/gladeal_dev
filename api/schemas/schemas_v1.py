@@ -130,8 +130,6 @@ class RegisterDealPaymentRequest(BaseModel):
     customer: RegisterDealCustomer
     amount: int
     service_fee_amount: Decimal
-    customer_payment_amount: Decimal
-    performer_payout_amount: Decimal
     expires_at: datetime
     reference: str
     description: str
@@ -140,16 +138,16 @@ class RegisterDealPaymentRequest(BaseModel):
 
 
 class CancleUnpaymentDealRequest(BaseModel):
-    paygine_order_id: int
+    paygine_payment_operation_id: int
 
 
 class GeneratePaymentLinkRequest(BaseModel):
-    paygine_order_id: int
+    paygine_payment_operation_id: int
 
 
 class GenerateWithdrowLinkRequest(BaseModel):
-    paygine_order_id: int
+    paygine_payout_operation_id: int
 
 
 class CompletePaymentedDealRequest(BaseModel):
-    paygine_order_id: int
+    paygine_payment_operation_id: int

@@ -14,7 +14,7 @@ from api.schemas.schemas_v1 import GeneratePaymentLinkRequest
 
 
 REAL_GENERATE_PAYMENT_LINK_DATA = {
-    "paygine_order_id": 13116913,
+    "paygine_payment_operation_id": 13116913,
 }
 
 
@@ -27,7 +27,7 @@ class GeneratePaymentLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
         parsed_url = urlparse(payment_link)
         parsed_query = parse_qs(parsed_url.query)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_order_id, SR_REF)
+            (PAYGINE_SECTOR, payment_data.paygine_payment_operation_id, SR_REF)
         )
 
         print(json.dumps({"payment_link": payment_link}, ensure_ascii=False, indent=2))
@@ -38,7 +38,10 @@ class GeneratePaymentLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(parsed_query["sector"], [PAYGINE_SECTOR])
-        self.assertEqual(parsed_query["id"], [str(payment_data.paygine_order_id)])
+        self.assertEqual(
+            parsed_query["id"],
+            [str(payment_data.paygine_payment_operation_id)],
+        )
         self.assertEqual(parsed_query["sd_ref"], [SR_REF])
         self.assertEqual(parsed_query["signature"], [expected_signature])
 

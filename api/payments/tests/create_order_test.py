@@ -9,7 +9,7 @@ from uuid import uuid4
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
-from api.payments.payments_methods import register_deal
+from api.payments.payments_methods import register_deposit_deal
 from api.payments.utils.register_deal_methods import build_register_deal_payload
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
@@ -24,8 +24,6 @@ REAL_REGISTER_DEAL_DATA = {
         },
         "amount": 1000000,
         "service_fee_amount": Decimal("500.00"),
-        "customer_payment_amount": Decimal("10500.00"),
-        "performer_payout_amount": Decimal("10000.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Оплата тестовой сделки",
         "currency": 643,
@@ -60,7 +58,7 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         payment_data = RegisterDealPaymentRequest(**request_data)
 
         try:
-            response = await register_deal(payment_data)
+            response = await register_deposit_deal(payment_data)
         except PaymentInvalidProviderResponseError as exc:
             self.fail(f"Paygine register response parse error: {exc.details}")
 

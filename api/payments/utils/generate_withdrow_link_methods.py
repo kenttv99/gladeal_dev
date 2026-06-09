@@ -26,7 +26,7 @@ def build_generate_withdrow_link_payload(
     """Собираем query params для SDPayOutPage."""
     payload = {
         "sector": PAYGINE_SECTOR,
-        "id": data.paygine_order_id,
+        "id": data.paygine_payout_operation_id,
         "sd_ref": SR_REF,
     }
     payload["signature"] = build_signature(

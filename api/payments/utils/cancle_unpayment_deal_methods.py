@@ -27,7 +27,7 @@ def build_cancle_unpayment_deal_payload(
     """Собираем form-urlencoded payload для webapi/ChangeOrderStatus."""
     payload = {
         "sector": PAYGINE_SECTOR,
-        "id": data.paygine_order_id,
+        "id": data.paygine_payment_operation_id,
         "order_state": EXPIRED_ORDER_STATE,
     }
     payload["signature"] = build_signature(

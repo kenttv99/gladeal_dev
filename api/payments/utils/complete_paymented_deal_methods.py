@@ -26,7 +26,7 @@ def build_complete_paymented_deal_payload(
     """Собираем form-urlencoded payload для SDComplete."""
     payload = {
         "sector": PAYGINE_SECTOR,
-        "id": data.paygine_order_id,
+        "id": data.paygine_payment_operation_id,
     }
     payload["signature"] = build_signature(
         payload[field] for field in COMPLETE_PAYMENTED_DEAL_SIGNATURE_FIELDS

@@ -22,7 +22,16 @@ class OrderPaymentData(Base):
     __table_args__ = (
         Index("ix_orders_payment_data_order_id", "order_id", unique=True),
         Index("ix_orders_payment_data_status", "status"),
-        Index("ix_orders_payment_data_paygine_order_id", "paygine_order_id", unique=True),
+        Index(
+            "ix_orders_payment_data_paygine_payment_operation_id",
+            "paygine_payment_operation_id",
+            unique=True,
+        ),
+        Index(
+            "ix_orders_payment_data_paygine_payout_operation_id",
+            "paygine_payout_operation_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -40,18 +49,15 @@ class OrderPaymentData(Base):
     )
     order_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     service_fee_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    customer_payment_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    performer_payout_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     status: Mapped[OrderPaymentStates] = mapped_column(
         enum_column(OrderPaymentStates, "order_payment_states"),
         nullable=False,
         default=OrderPaymentStates.CREATED,
         server_default=OrderPaymentStates.CREATED.value,
     )
-    paygine_order_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    paygine_payment_operation_id: Mapped[str | None] = mapped_column(
+    paygine_payment_operation_id: Mapped[str] = mapped_column(
         String(64),
-        nullable=True,
+        nullable=False,
     )
     paygine_payout_operation_id: Mapped[str | None] = mapped_column(
         String(64),
