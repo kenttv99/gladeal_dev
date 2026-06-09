@@ -18,9 +18,11 @@ async def register_deposit_deal(
     """Регистрируем платежную сделку в ПЦ для депозита и возвращаем ответ провайдера"""
     return await create_registered_deal(payment_data)
 
-async def register_payout_deal():
+async def register_payout_deal(
+    payment_data: RegisterDealPaymentRequest,
+) -> dict[str, object]:
     """Регистрируем сделку в ПЦ для вывода и возвращаем ответ провайдера"""
-    pass
+    return await create_registered_deal(payment_data)
 
 
 async def cancle_unpayment_deal(

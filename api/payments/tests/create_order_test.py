@@ -4,12 +4,13 @@ import json
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
-from api.payments.payments_methods import register_deposit_deal
+from api.payments.payments_methods import register_deposit_deal, register_payout_deal
 from api.payments.utils.register_deal_methods import build_register_deal_payload
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
@@ -48,6 +49,23 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)
+
+    async def test_register_payout_deal_uses_register_provider_request(self):
+        request_data = dict(REAL_REGISTER_DEAL_DATA["request"])
+        request_data["reference"] = (
+            f"{REAL_REGISTER_DEAL_DATA['reference_prefix']}-{uuid4().hex[:12]}"
+        )
+        payment_data = RegisterDealPaymentRequest(**request_data)
+        provider_response = {"root_tag": "response", "data": {"id": "payout-operation"}}
+
+        with patch(
+            "api.payments.payments_methods.create_registered_deal",
+            new=AsyncMock(return_value=provider_response),
+        ) as create_registered_deal:
+            response = await register_payout_deal(payment_data)
+
+        create_registered_deal.assert_awaited_once_with(payment_data)
+        self.assertEqual(response, provider_response)
 
     async def test_register_deal_returns_readable_paygine_response(self):
         """Отправляем реальный запрос в ПЦ и получаем читаемый ответ."""
