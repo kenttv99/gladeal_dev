@@ -59,11 +59,19 @@ def downgrade() -> None:
     )
     op.add_column(
         "orders_payment_data",
-        sa.Column("performer_payout_amount", sa.Numeric(precision=12, scale=2), nullable=True),
+        sa.Column(
+            "performer_payout_amount",
+            sa.Numeric(precision=12, scale=2),
+            nullable=True,
+        ),
     )
     op.add_column(
         "orders_payment_data",
-        sa.Column("customer_payment_amount", sa.Numeric(precision=12, scale=2), nullable=True),
+        sa.Column(
+            "customer_payment_amount",
+            sa.Numeric(precision=12, scale=2),
+            nullable=True,
+        ),
     )
     op.add_column(
         "orders_payment_data",
