@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from api.payments.auth_methods import build_signature
-from api.payments.config import PAYGINE_SECTOR
+from api.payments.config import PAYGINE_SECTOR, SR_REF
 from api.payments.http_client import get_paygine_client
 from api.payments.utils.xml_response_parser import parse_paygine_response
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
@@ -26,6 +26,7 @@ def build_register_deal_payload(
         "sector": PAYGINE_SECTOR,
         "amount": data.amount,
         "currency": data.currency,
+        "sd_ref": SR_REF,
         "reference": data.reference,
         "description": data.description,
         "payer_id": data.customer.client_ref,

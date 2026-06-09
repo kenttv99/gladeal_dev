@@ -12,11 +12,15 @@ from api.schemas.schemas_v1 import (
 )
 
 
-async def register_deal(
+async def register_deposit_deal(
     payment_data: RegisterDealPaymentRequest,
 ) -> dict[str, object]:
-    """Регистрируем платежную сделку в ПЦ и возвращаем ответ провайдера + замораживаем средства при оплате со стороны пользвоателя"""
+    """Регистрируем платежную сделку в ПЦ для депозита и возвращаем ответ провайдера"""
     return await create_registered_deal(payment_data)
+
+async def register_payout_deal():
+    """Регистрируем сделку в ПЦ для вывода и возвращаем ответ провайдера"""
+    pass
 
 
 async def cancle_unpayment_deal(

@@ -5,7 +5,7 @@ import unittest
 from urllib.parse import parse_qs, urlparse
 
 from api.payments.auth_methods import build_signature
-from api.payments.config import PAYGINE_BASE_URL, PAYGINE_SECTOR
+from api.payments.config import PAYGINE_BASE_URL, PAYGINE_SECTOR, SR_REF
 from api.payments.payments_methods import generate_payment_link
 from api.payments.utils.generate_payment_link_methods import (
     GENERATE_PAYMENT_LINK_ENDPOINT,
@@ -14,7 +14,7 @@ from api.schemas.schemas_v1 import GeneratePaymentLinkRequest
 
 
 REAL_GENERATE_PAYMENT_LINK_DATA = {
-    "paygine_order_id": 13098239,
+    "paygine_order_id": 13116913,
 }
 
 
@@ -27,7 +27,7 @@ class GeneratePaymentLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
         parsed_url = urlparse(payment_link)
         parsed_query = parse_qs(parsed_url.query)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_order_id)
+            (PAYGINE_SECTOR, payment_data.paygine_order_id, SR_REF)
         )
 
         print(json.dumps({"payment_link": payment_link}, ensure_ascii=False, indent=2))
@@ -39,6 +39,7 @@ class GeneratePaymentLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(parsed_query["sector"], [PAYGINE_SECTOR])
         self.assertEqual(parsed_query["id"], [str(payment_data.paygine_order_id)])
+        self.assertEqual(parsed_query["sd_ref"], [SR_REF])
         self.assertEqual(parsed_query["signature"], [expected_signature])
 
 

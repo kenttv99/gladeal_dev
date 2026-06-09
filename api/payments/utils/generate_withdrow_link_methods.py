@@ -3,7 +3,7 @@ from __future__ import annotations
 from urllib.parse import urlencode
 
 from api.payments.auth_methods import build_signature
-from api.payments.config import PAYGINE_BASE_URL, PAYGINE_SECTOR
+from api.payments.config import PAYGINE_BASE_URL, PAYGINE_SECTOR, SR_REF
 from api.schemas.schemas_v1 import GenerateWithdrowLinkRequest
 
 
@@ -27,7 +27,7 @@ def build_generate_withdrow_link_payload(
     payload = {
         "sector": PAYGINE_SECTOR,
         "id": data.paygine_order_id,
-        "sd_ref": data.sd_ref,
+        "sd_ref": SR_REF,
     }
     payload["signature"] = build_signature(
         payload[field] for field in GENERATE_WITHDROW_LINK_SIGNATURE_FIELDS

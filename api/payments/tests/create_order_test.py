@@ -7,7 +7,10 @@ from decimal import Decimal
 from uuid import uuid4
 
 from api.exceptions import PaymentInvalidProviderResponseError
+from api.payments.auth_methods import build_signature
+from api.payments.config import PAYGINE_SECTOR, SR_REF
 from api.payments.payments_methods import register_deal
+from api.payments.utils.register_deal_methods import build_register_deal_payload
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
 
@@ -33,6 +36,21 @@ REAL_REGISTER_DEAL_DATA = {
 
 
 class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
+    async def test_register_deal_payload_contains_sd_ref(self):
+        """Собираем запрос регистрации с обязательным sd_ref из .env.payments."""
+        request_data = dict(REAL_REGISTER_DEAL_DATA["request"])
+        request_data["reference"] = (
+            f"{REAL_REGISTER_DEAL_DATA['reference_prefix']}-{uuid4().hex[:12]}"
+        )
+        payment_data = RegisterDealPaymentRequest(**request_data)
+        payload = build_register_deal_payload(payment_data)
+        expected_signature = build_signature(
+            (PAYGINE_SECTOR, payment_data.amount, payment_data.currency)
+        )
+
+        self.assertEqual(payload["sd_ref"], SR_REF)
+        self.assertEqual(payload["signature"], expected_signature)
+
     async def test_register_deal_returns_readable_paygine_response(self):
         """Отправляем реальный запрос в ПЦ и получаем читаемый ответ."""
         request_data = dict(REAL_REGISTER_DEAL_DATA["request"])
