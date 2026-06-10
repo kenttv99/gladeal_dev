@@ -17,18 +17,17 @@ from api.schemas.schemas_v1 import RegisterPayoutDealPaymentRequest
 
 REAL_REGISTER_PAYOUT_DEAL_DATA = {
     "request": {
-        "order_id": 106,
+        "order_id": 1066,
         "performer": {
             "client_ref": "test-performer-102",
             "email": "performer@example.com",
             "phone": "79000000002",
         },
-        "amount": 1000000,
+        "amount": 950000,
         "service_fee_amount": Decimal("500.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Вывод средств по тестовой сделке",
         "currency": 643,
-        "fee": 50000,
     },
     "reference_prefix": "real-paygine-register-payout-deal",
 }
@@ -48,6 +47,7 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertNotIn("payer_id", payload)
+        self.assertNotIn("fee", payload)
         self.assertEqual(payload["client_ref"], payment_data.performer.client_ref)
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)

@@ -64,7 +64,6 @@ def build_register_payout_deal_payload(
         "client_ref": data.performer.client_ref,
         "email": data.performer.email,
         "phone": data.performer.phone,
-        "fee": data.fee,
     }
     payload["signature"] = build_signature(
         payload[field] for field in REGISTER_DEAL_SIGNATURE_FIELDS

@@ -152,7 +152,6 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
     reference: str
     description: str
     currency: int = 643
-    fee: int | None = None
 
 
 class CancleUnpaymentDealRequest(BaseModel):
