@@ -158,6 +158,7 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
     expires_at: datetime
     reference: str
     description: str
+    notify_url: str
     currency: int = 643
 
 

@@ -64,6 +64,7 @@ def build_register_payout_deal_payload(
         "sd_ref": SR_REF,
         "reference": data.reference,
         "description": data.description,
+        "notify_url": data.notify_url,
         "client_ref": data.performer.client_ref,
         "email": data.performer.email,
         "phone": data.performer.phone,

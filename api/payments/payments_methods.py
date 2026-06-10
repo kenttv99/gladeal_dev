@@ -61,6 +61,3 @@ async def refund_money() -> None:
     """Возвращаем средства заказчику."""
     pass
 
-async def status_handle() -> None:
-    """Обрабатываем статус платежной операции."""
-    pass
