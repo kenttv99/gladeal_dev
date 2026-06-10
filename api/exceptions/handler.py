@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -7,6 +9,9 @@ from xml.etree.ElementTree import ParseError
 
 from api.exceptions.exceptions import BaseAPIException
 from api.exceptions.i18n import translate
+
+
+logger = logging.getLogger(__name__)
 
 
 async def api_exception_handler(request: Request, exc: BaseAPIException) -> JSONResponse:
@@ -32,6 +37,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception(
+        "Unhandled exception: %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     lang = request.headers.get("accept-language")
     return JSONResponse(
         status_code=500,
@@ -43,6 +54,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 async def payment_provider_exception_handler(request: Request, exc: httpx.HTTPError) -> JSONResponse:
+    logger.exception(
+        "Payment provider request failed: %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     lang = request.headers.get("accept-language")
     error_code = "PAYMENT_REGISTER_DEAL_FAILED"
     return JSONResponse(
@@ -55,6 +72,12 @@ async def payment_provider_exception_handler(request: Request, exc: httpx.HTTPEr
 
 
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    logger.exception(
+        "Database error: %s %s",
+        request.method,
+        request.url.path,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     lang = request.headers.get("accept-language")
     details = getattr(exc, "payment_data", None)
     error_code = "PAYMENT_DATA_SAVE_FAILED" if details else "INTERNAL_SERVER_ERROR"

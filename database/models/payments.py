@@ -40,7 +40,7 @@ class OrderPaymentData(Base):
         nullable=False,
     )
     customer_email: Mapped[str] = mapped_column(String(100), nullable=False)
-    performer_email: Mapped[str] = mapped_column(String(100), nullable=False)
+    performer_email: Mapped[str | None] = mapped_column(String(100), nullable=True)
     currency: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

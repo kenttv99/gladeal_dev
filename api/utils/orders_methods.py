@@ -2,21 +2,27 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import exists, func, insert, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from api.config import BASE_SITE_LINK
 from api.enums.enums_v1 import OrderStates, UserRoles
 from api.exceptions import (
     MonthOrdersLimitExceededError,
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderSelfExecutionForbiddenError,
+    PaymentInvalidProviderResponseError,
     UserNotFoundError,
     ValidationError,
 )
+from api.payments.payments_methods import register_deposit_deal
+from api.payments.utils.commission_methods import calculate_payment_amounts
+from api.schemas.schemas_v1 import RegisterDealCustomer, RegisterDealPaymentRequest
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
 from database.config import AsyncSessionLocal
 from database.models.orders import Order, OrderStatusHistory
+from database.models.payments import OrderPaymentData
 from database.models.users import User
 
 
@@ -39,6 +45,9 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
 )
 
+PAYGINE_ORDER_STATUS_NOTIFY_PATH = "/v1/paygine/webhook_order_status"
+KOPECKS_IN_RUBLE = Decimal("100")
+
 
 def _order_status_values(status: str) -> dict[str, object]:
     values: dict[str, object] = {"status": status}
@@ -47,8 +56,44 @@ def _order_status_values(status: str) -> dict[str, object]:
     return values
 
 
+def _paygine_order_status_notify_url() -> str:
+    return f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}"
+
+
+def _kopecks_to_rubles(amount: int) -> Decimal:
+    return Decimal(amount) / KOPECKS_IN_RUBLE
+
+
+def _paygine_payment_operation_id(response: dict[str, object]) -> str:
+    data = response.get("data")
+    if not isinstance(data, dict) or not data.get("id"):
+        raise PaymentInvalidProviderResponseError(details=response)
+    return str(data["id"])
+
+
+def _deposit_payment_request(
+    order: Order,
+    customer_email: str,
+    customer_phone: str,
+) -> RegisterDealPaymentRequest:
+    return RegisterDealPaymentRequest(
+        order_id=order.id,
+        customer=RegisterDealCustomer(
+            client_ref=str(order.client_id),
+            email=customer_email,
+            phone=customer_phone,
+        ),
+        amount=order.price,
+        expires_at=order.expire_in,
+        reference=f"gladeal-order-{order.id}",
+        description=order.title,
+        notify_url=_paygine_order_status_notify_url(),
+    )
+
+
 async def create_order(
     client_id: int,
+    customer_email: str,
     title: str,
     conditions: str,
     result_requirements: str,
@@ -63,14 +108,38 @@ async def create_order(
     
     """
 
+    order, customer_phone = await _create_order_record(
+        client_id=client_id,
+        title=title,
+        conditions=conditions,
+        result_requirements=result_requirements,
+        violation_proof_requirements=violation_proof_requirements,
+        price=price,
+        expire_in=expire_in,
+    )
+    payment_data = _deposit_payment_request(order, customer_email, customer_phone)
+    payment_response = await register_deposit_deal(payment_data)
+    await _create_order_payment_data(order, customer_email, payment_data, payment_response)
+    return order
+
+
+async def _create_order_record(
+    client_id: int,
+    title: str,
+    conditions: str,
+    result_requirements: str,
+    violation_proof_requirements: str,
+    price: Decimal,
+    expire_in: datetime,
+) -> tuple[Order, str]:
     while True:
         async with AsyncSessionLocal() as session:
             try:
                 async with session.begin():
-                    user_exists = await session.scalar(
-                        select(exists().where(User.id == client_id))
+                    customer_phone = await session.scalar(
+                        select(User.phone_number).where(User.id == client_id)
                     )
-                    if not user_exists:
+                    if customer_phone is None:
                         raise UserNotFoundError()
 
                     limit_check = await check_user_month_orders_limit(session, client_id, price)
@@ -102,11 +171,47 @@ async def create_order(
                             changed_by_user_id=client_id,
                         )
                     )
-                    return order
+                    return order, customer_phone
             except IntegrityError as exc:
                 if "uq_orders_slug" in str(exc.orig):
                     continue
                 raise
+
+
+async def _create_order_payment_data(
+    order: Order,
+    customer_email: str,
+    payment_data: RegisterDealPaymentRequest,
+    payment_response: dict[str, object],
+) -> None:
+    payment_amounts = calculate_payment_amounts(payment_data.amount)
+    payment_operation_id = _paygine_payment_operation_id(payment_response)
+    order_amount = _kopecks_to_rubles(payment_amounts["order_amount"])
+    service_fee_amount = _kopecks_to_rubles(payment_amounts["service_fee_amount"])
+    try:
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                await session.execute(
+                    insert(OrderPaymentData).values(
+                        order_id=order.id,
+                        customer_email=customer_email,
+                        currency=payment_data.currency,
+                        order_amount=order_amount,
+                        service_fee_amount=service_fee_amount,
+                        paygine_payment_operation_id=payment_operation_id,
+                        expires_at=payment_data.expires_at,
+                    )
+                )
+    except SQLAlchemyError as exc:
+        exc.payment_data = {
+            "order_id": order.id,
+            "currency": payment_data.currency,
+            "order_amount": str(order_amount),
+            "service_fee_amount": str(service_fee_amount),
+            "paygine_payment_operation_id": payment_operation_id,
+            "expires_at": payment_data.expires_at.isoformat(),
+        }
+        raise
 
 
 async def get_order_link(order_id: int, client_id: int) -> str:

@@ -44,6 +44,7 @@ class ResetPhoneNumberRequest(BaseModel):
 
 class CreateOrderRequest(BaseModel):
     user_id: int
+    customer_email: str
     title: str
     conditions: str
     result_requirements: str
