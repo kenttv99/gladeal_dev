@@ -2,13 +2,17 @@ from api.payments.utils.cancle_unpayment_deal_methods import cancle_registered_d
 from api.payments.utils.complete_paymented_deal_methods import complete_registered_deal
 from api.payments.utils.generate_payment_link_methods import create_payment_link
 from api.payments.utils.generate_withdrow_link_methods import create_withdrow_link
-from api.payments.utils.register_deal_methods import create_registered_deal
+from api.payments.utils.register_deal_methods import (
+    create_registered_deal,
+    create_registered_payout_deal,
+)
 from api.schemas.schemas_v1 import (
     CancleUnpaymentDealRequest,
     CompletePaymentedDealRequest,
     GeneratePaymentLinkRequest,
     GenerateWithdrowLinkRequest,
     RegisterDealPaymentRequest,
+    RegisterPayoutDealPaymentRequest,
 )
 
 
@@ -19,10 +23,10 @@ async def register_deposit_deal(
     return await create_registered_deal(payment_data)
 
 async def register_payout_deal(
-    payment_data: RegisterDealPaymentRequest,
+    payment_data: RegisterPayoutDealPaymentRequest,
 ) -> dict[str, object]:
     """Регистрируем сделку в ПЦ для вывода и возвращаем ответ провайдера"""
-    return await create_registered_deal(payment_data)
+    return await create_registered_payout_deal(payment_data)
 
 
 async def cancle_unpayment_deal(

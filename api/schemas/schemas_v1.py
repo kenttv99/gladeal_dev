@@ -125,9 +125,27 @@ class RegisterDealCustomer(BaseModel):
     phone: str | None = None
 
 
+class RegisterDealPerformer(BaseModel):
+    client_ref: str
+    email: str
+    phone: str | None = None
+
+
 class RegisterDealPaymentRequest(BaseModel):
     order_id: int
     customer: RegisterDealCustomer
+    amount: int
+    service_fee_amount: Decimal
+    expires_at: datetime
+    reference: str
+    description: str
+    currency: int = 643
+    fee: int | None = None
+
+
+class RegisterPayoutDealPaymentRequest(BaseModel):
+    order_id: int
+    performer: RegisterDealPerformer
     amount: int
     service_fee_amount: Decimal
     expires_at: datetime
