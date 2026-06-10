@@ -3,6 +3,7 @@ from __future__ import annotations
 from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
 from api.payments.http_client import get_paygine_client
+from api.payments.utils.commission_methods import calculate_payment_amounts
 from api.payments.utils.xml_response_parser import parse_paygine_response
 from api.schemas.schemas_v1 import (
     RegisterDealPaymentRequest,
@@ -32,9 +33,10 @@ def build_register_deal_payload(
     data: RegisterDealPaymentRequest,
 ) -> dict[str, object]:
     """Собираем form-urlencoded payload для webapi/Register."""
+    payment_amounts = calculate_payment_amounts(data.amount)
     payload = {
         "sector": PAYGINE_SECTOR,
-        "amount": data.amount,
+        "amount": payment_amounts["total_amount_with_fee"],
         "currency": data.currency,
         "sd_ref": SR_REF,
         "reference": data.reference,
@@ -42,7 +44,6 @@ def build_register_deal_payload(
         "payer_id": data.customer.client_ref,
         "email": data.customer.email,
         "phone": data.customer.phone,
-        "fee": data.fee,
     }
     payload["signature"] = build_signature(
         payload[field] for field in REGISTER_DEAL_SIGNATURE_FIELDS

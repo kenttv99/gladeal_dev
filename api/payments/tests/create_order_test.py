@@ -9,7 +9,7 @@ from uuid import uuid4
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
-from api.payments.payments_methods import register_deposit_deal
+from api.payments.payments_methods import calculate_commissions, register_deposit_deal
 from api.payments.utils.register_deal_methods import build_register_deal_payload
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
@@ -23,11 +23,10 @@ REAL_REGISTER_DEAL_DATA = {
             "phone": "79000000001",
         },
         "amount": 1000000,
-        "service_fee_amount": Decimal("500.00"),
+        "service_fee_amount": Decimal("850.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Оплата тестовой сделки",
         "currency": 643,
-        "fee": 50000,
     },
     "reference_prefix": "real-paygine-register-deal",
 }
@@ -42,12 +41,37 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
         payment_data = RegisterDealPaymentRequest(**request_data)
         payload = build_register_deal_payload(payment_data)
+        payment_amounts = calculate_commissions(payment_data.amount)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.amount, payment_data.currency)
+            (
+                PAYGINE_SECTOR,
+                payment_amounts["total_amount_with_fee"],
+                payment_data.currency,
+            )
         )
 
+        self.assertNotIn("fee", payload)
+        self.assertEqual(payload["amount"], payment_amounts["total_amount_with_fee"])
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)
+
+    async def test_calculate_commissions_returns_payment_amounts(self):
+        payment_amounts = calculate_commissions(1000000)
+
+        self.assertEqual(
+            list(payment_amounts),
+            ["total_amount_with_fee", "order_amount", "service_fee_amount"],
+        )
+        self.assertEqual(payment_amounts["total_amount_with_fee"], Decimal("1085000.00"))
+        self.assertEqual(payment_amounts["order_amount"], Decimal("1000000.00"))
+        self.assertEqual(payment_amounts["service_fee_amount"], Decimal("85000.00"))
+
+    async def test_calculate_commissions_truncates_fee_to_two_decimal_places(self):
+        payment_amounts = calculate_commissions(Decimal("1000006.81176470588235"))
+
+        self.assertEqual(payment_amounts["service_fee_amount"], Decimal("85000.57"))
+        self.assertEqual(payment_amounts["order_amount"], Decimal("1000006.81"))
+        self.assertEqual(payment_amounts["total_amount_with_fee"], Decimal("1085007.38"))
 
     async def test_register_deal_returns_readable_paygine_response(self):
         """Отправляем реальный запрос в ПЦ и получаем читаемый ответ."""

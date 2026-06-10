@@ -132,6 +132,8 @@ class RegisterDealPerformer(BaseModel):
 
 
 class RegisterDealPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     order_id: int
     customer: RegisterDealCustomer
     amount: int
@@ -140,10 +142,11 @@ class RegisterDealPaymentRequest(BaseModel):
     reference: str
     description: str
     currency: int = 643
-    fee: int | None = None
 
 
 class RegisterPayoutDealPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     order_id: int
     performer: RegisterDealPerformer
     amount: int
