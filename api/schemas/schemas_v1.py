@@ -150,7 +150,6 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
     order_id: int
     performer: RegisterDealPerformer
     amount: int
-    service_fee_amount: Decimal
     expires_at: datetime
     reference: str
     description: str

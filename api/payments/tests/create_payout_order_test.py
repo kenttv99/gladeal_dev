@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import datetime, timezone
-from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -24,7 +23,6 @@ REAL_REGISTER_PAYOUT_DEAL_DATA = {
             "phone": "79000000002",
         },
         "amount": 950000,
-        "service_fee_amount": Decimal("500.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Вывод средств по тестовой сделке",
         "currency": 643,
@@ -47,7 +45,7 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertNotIn("payer_id", payload)
-        self.assertNotIn("fee", payload)
+        self.assertNotIn("service_fee_amount", payload)
         self.assertEqual(payload["client_ref"], payment_data.performer.client_ref)
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)
