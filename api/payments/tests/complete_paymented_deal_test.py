@@ -14,7 +14,7 @@ from api.schemas.schemas_v1 import CompletePaymentedDealRequest
 
 
 REAL_COMPLETE_PAYMENTED_DEAL_DATA = {
-    "paygine_payment_operation_id": 13125745,
+    "paygine_payment_operation_id": 13127196,
 }
 
 
