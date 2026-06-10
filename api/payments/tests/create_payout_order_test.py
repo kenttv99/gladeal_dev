@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
 from api.payments.payments_methods import register_payout_deal
+from api.payments.utils.commission_methods import calculate_payment_amounts
 from api.payments.utils.register_deal_methods import build_register_payout_deal_payload
 from api.schemas.schemas_v1 import RegisterPayoutDealPaymentRequest
 
@@ -22,7 +24,7 @@ REAL_REGISTER_PAYOUT_DEAL_DATA = {
             "email": "performer@example.com",
             "phone": "79000000002",
         },
-        "amount": 950000,
+        "amount": Decimal("10000.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Вывод средств по тестовой сделке",
         "currency": 643,
@@ -40,12 +42,14 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
         payment_data = RegisterPayoutDealPaymentRequest(**request_data)
         payload = build_register_payout_deal_payload(payment_data)
+        payment_amounts = calculate_payment_amounts(payment_data.amount)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.amount, payment_data.currency)
+            (PAYGINE_SECTOR, payment_amounts["order_amount"], payment_data.currency)
         )
 
         self.assertNotIn("payer_id", payload)
         self.assertNotIn("service_fee_amount", payload)
+        self.assertEqual(payload["amount"], payment_amounts["order_amount"])
         self.assertEqual(payload["client_ref"], payment_data.performer.client_ref)
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)

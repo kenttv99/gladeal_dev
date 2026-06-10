@@ -55,9 +55,10 @@ def build_register_payout_deal_payload(
     data: RegisterPayoutDealPaymentRequest,
 ) -> dict[str, object]:
     """Собираем form-urlencoded payload для регистрации заказа вывода."""
+    payment_amounts = calculate_payment_amounts(data.amount)
     payload = {
         "sector": PAYGINE_SECTOR,
-        "amount": data.amount,
+        "amount": payment_amounts["order_amount"],
         "currency": data.currency,
         "sd_ref": SR_REF,
         "reference": data.reference,

@@ -136,8 +136,7 @@ class RegisterDealPaymentRequest(BaseModel):
 
     order_id: int
     customer: RegisterDealCustomer
-    amount: int
-    service_fee_amount: Decimal
+    amount: Decimal
     expires_at: datetime
     reference: str
     description: str
@@ -149,7 +148,7 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
 
     order_id: int
     performer: RegisterDealPerformer
-    amount: int
+    amount: Decimal
     expires_at: datetime
     reference: str
     description: str

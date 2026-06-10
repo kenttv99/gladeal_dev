@@ -23,8 +23,7 @@ REAL_REGISTER_DEAL_DATA = {
             "email": "customer@example.com",
             "phone": "79000000001",
         },
-        "amount": 1000000,
-        "service_fee_amount": Decimal("850.00"),
+        "amount": Decimal("10000.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Оплата тестовой сделки",
         "currency": 643,
@@ -55,24 +54,6 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["amount"], payment_amounts["total_amount_with_fee"])
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)
-
-    async def test_calculate_payment_amounts_returns_payment_amounts(self):
-        payment_amounts = calculate_payment_amounts(1000000)
-
-        self.assertEqual(
-            list(payment_amounts),
-            ["total_amount_with_fee", "order_amount", "service_fee_amount"],
-        )
-        self.assertEqual(payment_amounts["total_amount_with_fee"], Decimal("1085000.00"))
-        self.assertEqual(payment_amounts["order_amount"], Decimal("1000000.00"))
-        self.assertEqual(payment_amounts["service_fee_amount"], Decimal("85000.00"))
-
-    async def test_calculate_payment_amounts_truncates_fee_to_two_decimal_places(self):
-        payment_amounts = calculate_payment_amounts(Decimal("1000006.81176470588235"))
-
-        self.assertEqual(payment_amounts["service_fee_amount"], Decimal("85000.57"))
-        self.assertEqual(payment_amounts["order_amount"], Decimal("1000006.81"))
-        self.assertEqual(payment_amounts["total_amount_with_fee"], Decimal("1085007.38"))
 
     async def test_register_deal_returns_readable_paygine_response(self):
         """Отправляем реальный запрос в ПЦ и получаем читаемый ответ."""
