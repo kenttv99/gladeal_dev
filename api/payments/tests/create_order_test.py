@@ -9,7 +9,8 @@ from uuid import uuid4
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
-from api.payments.payments_methods import calculate_commissions, register_deposit_deal
+from api.payments.payments_methods import register_deposit_deal
+from api.payments.utils.commission_methods import calculate_payment_amounts
 from api.payments.utils.register_deal_methods import build_register_deal_payload
 from api.schemas.schemas_v1 import RegisterDealPaymentRequest
 
@@ -41,7 +42,7 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
         payment_data = RegisterDealPaymentRequest(**request_data)
         payload = build_register_deal_payload(payment_data)
-        payment_amounts = calculate_commissions(payment_data.amount)
+        payment_amounts = calculate_payment_amounts(payment_data.amount)
         expected_signature = build_signature(
             (
                 PAYGINE_SECTOR,
@@ -55,8 +56,8 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["signature"], expected_signature)
 
-    async def test_calculate_commissions_returns_payment_amounts(self):
-        payment_amounts = calculate_commissions(1000000)
+    async def test_calculate_payment_amounts_returns_payment_amounts(self):
+        payment_amounts = calculate_payment_amounts(1000000)
 
         self.assertEqual(
             list(payment_amounts),
@@ -66,8 +67,8 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payment_amounts["order_amount"], Decimal("1000000.00"))
         self.assertEqual(payment_amounts["service_fee_amount"], Decimal("85000.00"))
 
-    async def test_calculate_commissions_truncates_fee_to_two_decimal_places(self):
-        payment_amounts = calculate_commissions(Decimal("1000006.81176470588235"))
+    async def test_calculate_payment_amounts_truncates_fee_to_two_decimal_places(self):
+        payment_amounts = calculate_payment_amounts(Decimal("1000006.81176470588235"))
 
         self.assertEqual(payment_amounts["service_fee_amount"], Decimal("85000.57"))
         self.assertEqual(payment_amounts["order_amount"], Decimal("1000006.81"))

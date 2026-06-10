@@ -1,8 +1,5 @@
-from decimal import Decimal
-
 from api.payments.utils.cancle_unpayment_deal_methods import cancle_registered_deal
 from api.payments.utils.complete_paymented_deal_methods import complete_registered_deal
-from api.payments.utils.commission_methods import calculate_payment_amounts
 from api.payments.utils.generate_payment_link_methods import create_payment_link
 from api.payments.utils.generate_withdrow_link_methods import create_withdrow_link
 from api.payments.utils.register_deal_methods import (
@@ -63,10 +60,6 @@ async def complete_paymented_deal(
 async def refund_money() -> None:
     """Возвращаем средства заказчику."""
     pass
-
-def calculate_commissions(order_amount: Decimal | int) -> dict[str, Decimal]:
-    """Рассчитываем комиссии платежной сделки."""
-    return calculate_payment_amounts(order_amount)
 
 async def status_handle() -> None:
     """Обрабатываем статус платежной операции."""
