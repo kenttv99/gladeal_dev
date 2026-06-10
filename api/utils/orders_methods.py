@@ -27,6 +27,7 @@ ACTIVE_ORDER_STATUSES = (
     OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
     OrderStates.AWAITING_CONFLICT.value,
     OrderStates.OPEN_CONFLICT.value,
+    OrderStates.AWAITING_PERFORMER_PAYOUT.value
 )
 
 CLOSED_ORDER_STATUSES = (
@@ -283,7 +284,7 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
 
 
 async def client_confirm_order(order_id: int, client_id: int) -> None:
-    """Переводим сделку в состояние успешного завершения"""
+    """Переводим сделку в состояние успешного завершения и ожидания получения выплаты исполнителем"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
             client_exists = await session.scalar(
@@ -303,7 +304,7 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
+                .values(**_order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value))
             )
             await session.execute(
                 insert(OrderStatusHistory).values(
@@ -313,8 +314,52 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
                         if isinstance(current_status, OrderStates)
                         else current_status
                     ),
-                    new_status=OrderStates.SUCCESSFUL_COMPLETION.value,
+                    new_status=OrderStates.AWAITING_PERFORMER_PAYOUT.value,
                     changed_by_user_id=client_id,
+                )
+            )
+
+
+async def performer_order_payout(order_id: int, performer_id: int) -> None:
+    """Переводим сделку в состояние успешного завершения после выплаты исполнителю"""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            performer_exists = await session.scalar(
+                select(exists().where(User.id == performer_id))
+            )
+            if not performer_exists:
+                raise UserNotFoundError()
+
+            order_data = await session.execute(
+                select(Order.status, Order.client_id)
+                .where(Order.id == order_id, Order.performer_id == performer_id)
+                .with_for_update()
+            )
+            order_row = order_data.one_or_none()
+            if order_row is None:
+                raise OrderNotFoundError()
+            current_status, client_id = order_row
+            if client_id == performer_id:
+                raise OrderSelfExecutionForbiddenError()
+            current_status_value = (
+                current_status.value
+                if isinstance(current_status, OrderStates)
+                else current_status
+            )
+            if current_status_value != OrderStates.AWAITING_PERFORMER_PAYOUT.value:
+                raise ValidationError()
+
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(**_order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
+            )
+            await session.execute(
+                insert(OrderStatusHistory).values(
+                    order_id=order_id,
+                    old_status=current_status_value,
+                    new_status=OrderStates.SUCCESSFUL_COMPLETION.value,
+                    changed_by_user_id=performer_id,
                 )
             )
 

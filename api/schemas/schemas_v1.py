@@ -90,6 +90,11 @@ class PerformerConfirmOrderRequest(BaseModel):
     user_id: int
 
 
+class PerformerPayoutOrderRequest(BaseModel):
+    order_id: int
+    user_id: int
+
+
 class ClientConfirmOrderRequest(BaseModel):
     order_id: int
     user_id: int

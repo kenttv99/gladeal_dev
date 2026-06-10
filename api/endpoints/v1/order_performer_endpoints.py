@@ -7,6 +7,7 @@ from api.schemas.schemas_v1 import (
     PerformerConfirmOrderRequest,
     PerformerConflictOrderRequest,
     PerformerDeclineOrderRequest,
+    PerformerPayoutOrderRequest,
 )
 from api.utils.orders_methods import (
     approve_order,
@@ -15,6 +16,7 @@ from api.utils.orders_methods import (
     performer_confirm_order,
     performer_conflict_order,
     performer_decline_order,
+    performer_order_payout,
 )
 from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id
 
@@ -65,6 +67,16 @@ async def deal_conflict(
     ensure_authorized_user_id(order.user_id, authorized_user_id)
     await performer_conflict_order(order.order_id, order.user_id)
     return {"success": True}
+
+
+# @router.post("/deal_payout")
+# async def deal_payout(
+#     order: PerformerPayoutOrderRequest,
+#     authorized_user_id: int = Depends(authorize_user),
+# ) -> dict[str, bool]:
+#     ensure_authorized_user_id(order.user_id, authorized_user_id)
+#     await performer_order_payout(order.order_id, order.user_id)
+#     return {"success": True}
 
 
 @router.get("/deals_archive", response_model=list[OrderInfoResponse])
