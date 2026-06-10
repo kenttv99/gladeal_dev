@@ -41,6 +41,7 @@ def build_register_deal_payload(
         "sd_ref": SR_REF,
         "reference": data.reference,
         "description": data.description,
+        "notify_url": data.notify_url,
         "payer_id": data.customer.client_ref,
         "email": data.customer.email,
         "phone": data.customer.phone,

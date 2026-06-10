@@ -26,6 +26,7 @@ REAL_REGISTER_DEAL_DATA = {
         "amount": Decimal("10000.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Оплата тестовой сделки",
+        "notify_url": "https://example.com/v1/paygine/webhook_order_status",
         "currency": 643,
     },
     "reference_prefix": "real-paygine-register-deal",
@@ -53,6 +54,7 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("fee", payload)
         self.assertEqual(payload["amount"], payment_amounts["total_amount_with_fee"])
         self.assertEqual(payload["sd_ref"], SR_REF)
+        self.assertEqual(payload["notify_url"], payment_data.notify_url)
         self.assertEqual(payload["signature"], expected_signature)
 
     async def test_register_deal_returns_readable_paygine_response(self):
