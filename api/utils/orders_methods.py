@@ -16,7 +16,7 @@ from api.exceptions import (
     ValidationError,
 )
 from api.payments.payments_methods import register_deposit_deal
-from api.payments.utils.commission_methods import calculate_payment_amounts
+from api.payments.utils.commission_methods import calculate_payment_amounts, from_kopecks
 from api.schemas.schemas_v1 import RegisterDealCustomer, RegisterDealPaymentRequest
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
@@ -46,7 +46,6 @@ CLOSED_ORDER_STATUSES = (
 )
 
 PAYGINE_ORDER_STATUS_NOTIFY_PATH = "/v1/paygine/webhook_order_status"
-KOPECKS_IN_RUBLE = Decimal("100")
 
 
 def _order_status_values(status: str) -> dict[str, object]:
@@ -58,10 +57,6 @@ def _order_status_values(status: str) -> dict[str, object]:
 
 def _paygine_order_status_notify_url() -> str:
     return f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}"
-
-
-def _kopecks_to_rubles(amount: int) -> Decimal:
-    return Decimal(amount) / KOPECKS_IN_RUBLE
 
 
 def _paygine_payment_operation_id(response: dict[str, object]) -> str:
@@ -186,8 +181,8 @@ async def _create_order_payment_data(
 ) -> None:
     payment_amounts = calculate_payment_amounts(payment_data.amount)
     payment_operation_id = _paygine_payment_operation_id(payment_response)
-    order_amount = _kopecks_to_rubles(payment_amounts["order_amount"])
-    service_fee_amount = _kopecks_to_rubles(payment_amounts["service_fee_amount"])
+    order_amount = from_kopecks(payment_amounts["order_amount"])
+    service_fee_amount = from_kopecks(payment_amounts["service_fee_amount"])
     try:
         async with AsyncSessionLocal() as session:
             async with session.begin():

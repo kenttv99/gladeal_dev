@@ -13,6 +13,10 @@ def to_kopecks(amount: Decimal) -> int:
     return int((amount * KOPECKS_IN_RUBLE).quantize(KOPECK_AMOUNT_STEP, ROUND_DOWN))
 
 
+def from_kopecks(amount: int) -> Decimal:
+    return Decimal(amount) / KOPECKS_IN_RUBLE
+
+
 def calculate_payment_amounts(order_amount: Decimal) -> dict[str, int]:
     """Считаем суммы в рублях и возвращаем целые копейки для Paygine."""
     service_fee_amount = order_amount * DEAL_FEE_PERCENT / Decimal("100")

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from decimal import Decimal
 
-from api.payments.utils.commission_methods import calculate_payment_amounts
+from api.payments.utils.commission_methods import calculate_payment_amounts, from_kopecks
 
 
 class CalculatePaymentAmountsTest(unittest.TestCase):
@@ -24,6 +24,9 @@ class CalculatePaymentAmountsTest(unittest.TestCase):
         self.assertEqual(payment_amounts["service_fee_amount"], 85000)
         self.assertEqual(payment_amounts["order_amount"], 1000006)
         self.assertEqual(payment_amounts["total_amount_with_fee"], 1085007)
+
+    def test_from_kopecks_returns_rubles(self):
+        self.assertEqual(from_kopecks(1085000), Decimal("10850"))
 
 
 if __name__ == "__main__":
