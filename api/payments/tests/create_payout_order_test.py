@@ -27,7 +27,7 @@ REAL_REGISTER_PAYOUT_DEAL_DATA = {
         "amount": Decimal("10000.00"),
         "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Вывод средств по тестовой сделке",
-        "notify_url": "https://example.com/v1/paygine/webhook_order_status",
+        "notify_url": "https://gradually-civic-scorpion.cloudpub.ru/v1/paygine/webhook_order_status",
         "currency": 643,
     },
     "reference_prefix": "real-paygine-register-payout-deal",

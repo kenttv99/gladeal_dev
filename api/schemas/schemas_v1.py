@@ -176,3 +176,7 @@ class GenerateWithdrowLinkRequest(BaseModel):
 
 class CompletePaymentedDealRequest(BaseModel):
     paygine_payment_operation_id: int
+
+
+class RefundMoneyRequest(BaseModel):
+    paygine_payment_operation_id: int

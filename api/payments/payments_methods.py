@@ -6,6 +6,7 @@ from api.payments.utils.register_deal_methods import (
     create_registered_deal,
     create_registered_payout_deal,
 )
+from api.payments.utils.refund_money_methods import refund_registered_deal
 from api.schemas.schemas_v1 import (
     CancleUnpaymentDealRequest,
     CompletePaymentedDealRequest,
@@ -13,6 +14,7 @@ from api.schemas.schemas_v1 import (
     GenerateWithdrowLinkRequest,
     RegisterDealPaymentRequest,
     RegisterPayoutDealPaymentRequest,
+    RefundMoneyRequest,
 )
 
 
@@ -57,7 +59,8 @@ async def complete_paymented_deal(
     return await complete_registered_deal(payment_data)
 
 
-async def refund_money() -> None:
-    """Возвращаем средства заказчику."""
-    pass
-
+async def refund_money(
+    payment_data: RefundMoneyRequest,
+) -> dict[str, object]:
+    """Возвращаем средства заказчику после заморозки."""
+    return await refund_registered_deal(payment_data)
