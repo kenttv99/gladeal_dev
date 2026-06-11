@@ -43,7 +43,7 @@ class OrderPaymentStates(Enum):
     REGISTERED = "registered"
     AUTHORIZED = "authorized"
     COMPLETED = "completed"
-    REFUNDED = "refunded"
+    BLOCKED = "blocked"
     CANCELED = "canceled"
     EXPIRED = "expired"
 
