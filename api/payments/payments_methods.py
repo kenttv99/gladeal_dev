@@ -1,48 +1,29 @@
-from datetime import datetime
-from decimal import Decimal
-
 from api.payments.utils.cancle_unpayment_deal_methods import cancle_registered_deal
 from api.payments.utils.complete_paymented_deal_methods import complete_registered_deal
-from api.payments.utils.deposit_deal_methods import (
-    DepositDealRegistrationResult,
-    create_deposit_deal,
-)
 from api.payments.utils.generate_payment_link_methods import create_payment_link
 from api.payments.utils.generate_withdrow_link_methods import create_withdrow_link
-from api.payments.utils.register_deal_methods import create_registered_payout_deal
+from api.payments.utils.register_deal_methods import (
+    create_deposit_deal,
+    create_registered_payout_deal,
+)
 from api.payments.utils.refund_money_methods import refund_registered_deal
 from api.schemas.schemas_v1 import (
     CancleUnpaymentDealRequest,
     CompletePaymentedDealRequest,
     GeneratePaymentLinkRequest,
     GenerateWithdrowLinkRequest,
+    RegisterDepositDealPaymentRequest,
+    RegisterDepositDealPaymentResponse,
     RegisterPayoutDealPaymentRequest,
     RefundMoneyRequest,
 )
 
 
 async def register_deposit_deal(
-    *,
-    order_id: int,
-    client_id: int,
-    customer_email: str,
-    customer_phone: str,
-    amount: Decimal,
-    expires_at: datetime,
-    description: str,
-    currency: int = 643,
-) -> DepositDealRegistrationResult:
+    payment_data: RegisterDepositDealPaymentRequest,
+) -> RegisterDepositDealPaymentResponse:
     """Регистрируем платежную сделку в ПЦ для депозита и возвращаем ответ провайдера"""
-    return await create_deposit_deal(
-        order_id=order_id,
-        client_id=client_id,
-        customer_email=customer_email,
-        customer_phone=customer_phone,
-        amount=amount,
-        expires_at=expires_at,
-        description=description,
-        currency=currency,
-    )
+    return await create_deposit_deal(payment_data)
 
 async def register_payout_deal(
     payment_data: RegisterPayoutDealPaymentRequest,

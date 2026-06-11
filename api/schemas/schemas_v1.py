@@ -6,6 +6,10 @@ from pydantic import BaseModel, ConfigDict
 from api.enums.enums_v1 import OrderStates
 
 
+###
+# Пользователи и авторизация
+###
+
 class RegisterUserRequest(BaseModel):
     first_name: str
     last_name: str
@@ -41,6 +45,10 @@ class ResetPhoneNumberRequest(BaseModel):
     user_id: int
     phone_number: str
 
+
+###
+# Сделки
+###
 
 class CreateOrderRequest(BaseModel):
     user_id: int
@@ -122,7 +130,7 @@ class PerformerConflictOrderRequest(BaseModel):
 
 
 ###
-# Платежные схемы
+# Платежи: регистрация сделок
 ###
 
 class RegisterDealCustomer(BaseModel):
@@ -162,6 +170,36 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
     notify_url: str
     currency: int = 643
 
+
+class RegisterDepositDealPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: int
+    client_id: int
+    customer_email: str
+    customer_phone: str
+    amount: Decimal
+    expires_at: datetime
+    description: str
+    currency: int = 643
+
+
+class DepositDealPaymentValues(BaseModel):
+    currency: int
+    order_amount: Decimal
+    service_fee_amount: Decimal
+    paygine_payment_operation_id: str
+    expires_at: datetime
+
+
+class RegisterDepositDealPaymentResponse(BaseModel):
+    provider_response: dict[str, object]
+    payment_values: DepositDealPaymentValues
+
+
+###
+# Платежи: операции по зарегистрированным сделкам
+###
 
 class CancleUnpaymentDealRequest(BaseModel):
     paygine_payment_operation_id: int

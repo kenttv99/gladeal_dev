@@ -14,6 +14,7 @@ from api.exceptions import (
     ValidationError,
 )
 from api.payments.payments_methods import register_deposit_deal
+from api.schemas.schemas_v1 import RegisterDepositDealPaymentRequest
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
 from database.config import AsyncSessionLocal
@@ -61,8 +62,8 @@ async def create_order(
 ) -> Order:
     
     """
-    Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env
-    Состояние дублируется в таблицу историй состояний сделки и сохраняется только после успешного запроса к ПЦ.
+    Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env, производит запрос к платежной системе, получает ответ и записывает данные в таблицы.
+    Состояние дублируется в таблицу историй состояний сделки.
     
     """
 
@@ -76,18 +77,20 @@ async def create_order(
         expire_in=expire_in,
     )
     payment_result = await register_deposit_deal(
-        order_id=order.id,
-        client_id=order.client_id,
-        customer_email=customer_email,
-        customer_phone=customer_phone,
-        amount=order.price,
-        expires_at=order.expire_in,
-        description=order.title,
+        RegisterDepositDealPaymentRequest(
+            order_id=order.id,
+            client_id=order.client_id,
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            amount=order.price,
+            expires_at=order.expire_in,
+            description=order.title,
+        )
     )
     await _create_order_payment_data(
         order.id,
         customer_email,
-        payment_result.payment_values,
+        payment_result.payment_values.model_dump(),
     )
     return order
 
