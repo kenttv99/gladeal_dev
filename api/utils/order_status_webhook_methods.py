@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, PaymentInvalidProviderResponseError
 from api.payments.utils.xml_response_parser import parse_paygine_response
+from api.utils.help_orders_method import order_status_values
 from database.config import AsyncSessionLocal
 from database.models.orders import Order, OrderStatusHistory
 from database.models.payments import OrderPaymentData
@@ -174,6 +175,11 @@ async def set_webhook_payout_completed(
     session: AsyncSession,
     operation: WebhookOrderOperation,
 ) -> None:
+    await session.execute(
+        update(Order)
+        .where(Order.id == operation.order_id)
+        .values(**order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
+    )
     await session.execute(
         update(OrderPaymentData)
         .where(OrderPaymentData.id == operation.payment_data_id)
