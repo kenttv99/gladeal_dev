@@ -3,13 +3,8 @@ from fastapi import APIRouter, Depends
 from api.enums.enums_v1 import UserRoles
 from api.payments.payments_methods import generate_withdrow_link
 from api.schemas.schemas_v1 import (
-    ApproveOrderRequest,
     GenerateWithdrowLinkRequest,
     OrderInfoResponse,
-    PerformerConfirmOrderRequest,
-    PerformerConflictOrderRequest,
-    PerformerDeclineOrderRequest,
-    PayoutLinkRequest,
 )
 from api.utils.orders_methods import (
     approve_order,
@@ -20,7 +15,7 @@ from api.utils.orders_methods import (
     performer_conflict_order,
     performer_decline_order,
 )
-from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id
+from api.utils.jwt_methods import authorize_user
 
 
 router = APIRouter()
@@ -33,50 +28,46 @@ async def deals(authorized_user_id: int = Depends(authorize_user)):
 
 @router.post("/deal_approve")
 async def deal_approve(
-    order: ApproveOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await approve_order(order.order_id, order.user_id)
+    await approve_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.post("/deal_confirm")
 async def deal_confirm(
-    order: PerformerConfirmOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await performer_confirm_order(order.order_id, order.user_id)
+    await performer_confirm_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.post("/deal_decline")
 async def deal_decline(
-    order: PerformerDeclineOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await performer_decline_order(order.order_id, order.user_id)
+    await performer_decline_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.post("/deal_conflict")
 async def deal_conflict(
-    order: PerformerConflictOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await performer_conflict_order(order.order_id, order.user_id)
+    await performer_conflict_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.get("/deal_payout_link")
 async def deal_payout_link(
-    order: PayoutLinkRequest = Depends(),
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, str]:
-    operation_id = await get_order_payout_operation_id(order.order_id, authorized_user_id)
+    operation_id = await get_order_payout_operation_id(order_id, authorized_user_id)
     link = await generate_withdrow_link(
         GenerateWithdrowLinkRequest(paygine_payout_operation_id=operation_id)
     )

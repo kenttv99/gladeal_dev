@@ -17,10 +17,6 @@ class RegisterUserRequest(BaseModel):
     ppd: bool = False
 
 
-class DeleteAccountRequest(BaseModel):
-    user_id: int
-
-
 class AuthUserRequest(BaseModel):
     phone_number: str
 
@@ -42,7 +38,6 @@ class RefreshTokenRequest(BaseModel):
 
 
 class ResetPhoneNumberRequest(BaseModel):
-    user_id: int
     phone_number: str
 
 
@@ -51,7 +46,6 @@ class ResetPhoneNumberRequest(BaseModel):
 ###
 
 class CreateOrderRequest(BaseModel):
-    user_id: int
     customer_email: str
     title: str
     conditions: str
@@ -86,59 +80,6 @@ class OrderInfoResponse(BaseModel):
 
 class CreateOrderResponse(OrderInfoResponse):
     service_fee_amount: Decimal
-
-
-class ApproveOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class PaymentOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class PaymentLinkRequest(BaseModel):
-    order_id: int
-
-
-class PerformerConfirmOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class PerformerPayoutOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class PayoutLinkRequest(BaseModel):
-    order_id: int
-
-
-class ClientConfirmOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class PerformerDeclineOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class ClientSoftDeclineOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class ClientHardDeclineOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
-
-
-class PerformerConflictOrderRequest(BaseModel):
-    order_id: int
-    user_id: int
 
 
 ###

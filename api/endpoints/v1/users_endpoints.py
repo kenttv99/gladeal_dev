@@ -4,7 +4,6 @@ from api.schemas.schemas_v1 import (
     AccessTokenRefreshResponse,
     AuthUserRequest,
     AuthUserResponse,
-    DeleteAccountRequest,
     RefreshTokenRequest,
     RegisterUserRequest,
     ResetPhoneNumberRequest,
@@ -12,7 +11,6 @@ from api.schemas.schemas_v1 import (
 from api.utils.jwt_methods import (
     authorize_user,
     create_refresh_token,
-    ensure_authorized_user_id,
     generate_access_token,
     refresh_access_token,
     revoke_refresh_token,
@@ -35,11 +33,9 @@ async def register(user: RegisterUserRequest):
 
 @router.post("/delete-account", dependencies=[Depends(authorize_user)])
 async def delete_account(
-    user: DeleteAccountRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(user.user_id, authorized_user_id)
-    await delete_account_method(user.user_id)
+    await delete_account_method(authorized_user_id)
     return {"success": True}
 
 
@@ -72,6 +68,5 @@ async def reset_phone_number(
     user: ResetPhoneNumberRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(user.user_id, authorized_user_id)
-    await reset_phone_number_method(user.user_id, user.phone_number)
+    await reset_phone_number_method(authorized_user_id, user.phone_number)
     return {"success": True}

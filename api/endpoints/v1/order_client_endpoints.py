@@ -3,16 +3,11 @@ from fastapi import APIRouter, Depends
 from api.enums.enums_v1 import UserRoles
 from api.payments.payments_methods import generate_payment_link
 from api.schemas.schemas_v1 import (
-    ClientConfirmOrderRequest,
-    ClientHardDeclineOrderRequest,
-    ClientSoftDeclineOrderRequest,
     CreateOrderRequest,
     CreateOrderResponse,
     GeneratePaymentLinkRequest,
     OrderInfoRequest,
     OrderInfoResponse,
-    PaymentLinkRequest,
-    PaymentOrderRequest,
 )
 from api.utils.orders_methods import (
     client_confirm_order,
@@ -26,7 +21,7 @@ from api.utils.orders_methods import (
     get_order_payment_operation_id,
     payment_order,
 )
-from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id
+from api.utils.jwt_methods import authorize_user
 
 
 router = APIRouter()
@@ -56,47 +51,42 @@ async def deal_create(
     order: CreateOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
 ):
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    return await create_order(client_id=order.user_id, **order.model_dump(exclude={"user_id"}))
+    return await create_order(client_id=authorized_user_id, **order.model_dump())
 
 
 @router.post("/deal_payment")
 async def deal_payment(
-    order: PaymentOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await payment_order(order.order_id, order.user_id)
+    await payment_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.post("/deal_confirm")
 async def deal_confirm(
-    order: ClientConfirmOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await client_confirm_order(order.order_id, order.user_id)
+    await client_confirm_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.post("/deal_softdecline")
 async def deal_softdecline(
-    order: ClientSoftDeclineOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await client_softdecline_order(order.order_id, order.user_id)
+    await client_softdecline_order(order_id, authorized_user_id)
     return {"success": True}
 
 
 @router.post("/deal_harddecline")
 async def deal_harddecline(
-    order: ClientHardDeclineOrderRequest,
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    ensure_authorized_user_id(order.user_id, authorized_user_id)
-    await client_harddecline_order(order.order_id, order.user_id)
+    await client_harddecline_order(order_id, authorized_user_id)
     return {"success": True}
 
 
@@ -106,10 +96,10 @@ async def deals_archive(authorized_user_id: int = Depends(authorize_user)):
 
 @router.get("/deal_payment_link")
 async def deal_payment_link(
-    order: PaymentLinkRequest = Depends(),
+    order_id: int,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, str]:
-    operation_id = await get_order_payment_operation_id(order.order_id, authorized_user_id)
+    operation_id = await get_order_payment_operation_id(order_id, authorized_user_id)
     link = await generate_payment_link(
         GeneratePaymentLinkRequest(paygine_payment_operation_id=operation_id)
     )
