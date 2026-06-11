@@ -17,7 +17,7 @@ from api.utils.orders_methods import (
     get_order_by_slug,
     get_order_link,
     get_order_payment_operation_id,
-    payment_order,
+    # payment_order,
 )
 from api.utils.jwt_methods import authorize_user
 
@@ -52,13 +52,13 @@ async def deal_create(
     return await create_order(client_id=authorized_user_id, **order.model_dump())
 
 
-@router.post("/deal_payment")
-async def deal_payment(
-    order_id: int,
-    authorized_user_id: int = Depends(authorize_user),
-) -> dict[str, bool]:
-    await payment_order(order_id, authorized_user_id)
-    return {"success": True}
+# @router.post("/deal_payment")
+# async def deal_payment(
+#     order_id: int,
+#     authorized_user_id: int = Depends(authorize_user),
+# ) -> dict[str, bool]:
+#     await payment_order(order_id, authorized_user_id)
+#     return {"success": True}
 
 
 @router.post("/deal_confirm")

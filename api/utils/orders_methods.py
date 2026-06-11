@@ -14,7 +14,7 @@ from api.exceptions import (
     UserNotFoundError,
     ValidationError,
 )
-from api.payments.payments_methods import register_deposit_deal
+from api.payments.payments_methods import cancle_unpayment_deal, register_deposit_deal
 from api.schemas.schemas_v1 import CreateOrderResponse, OrderInfoResponse, RegisterDepositDealPaymentRequest
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
@@ -300,41 +300,41 @@ async def approve_order(order_id: int, performer_id: int) -> None:
             )
 
 
-async def payment_order(order_id: int, client_id: int) -> None:
-    """Переводим сделку в состояние после оплаты и ожидания выполнения сделки со стороны исполнителя"""
-    async with AsyncSessionLocal() as session:
-        async with session.begin():
-            client_exists = await session.scalar(
-                select(exists().where(User.id == client_id))
-            )
-            if not client_exists:
-                raise UserNotFoundError()
+# async def payment_order(order_id: int, client_id: int) -> None:
+#     """Переводим сделку в состояние после оплаты и ожидания выполнения сделки со стороны исполнителя"""
+#     async with AsyncSessionLocal() as session:
+#         async with session.begin():
+#             client_exists = await session.scalar(
+#                 select(exists().where(User.id == client_id))
+#             )
+#             if not client_exists:
+#                 raise UserNotFoundError()
 
-            current_status = await session.scalar(
-                select(Order.status)
-                .where(Order.id == order_id, Order.client_id == client_id)
-                .with_for_update()
-            )
-            if current_status is None:
-                raise OrderNotFoundError()
+#             current_status = await session.scalar(
+#                 select(Order.status)
+#                 .where(Order.id == order_id, Order.client_id == client_id)
+#                 .with_for_update()
+#             )
+#             if current_status is None:
+#                 raise OrderNotFoundError()
 
-            await session.execute(
-                update(Order)
-                .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.AWAITING_PERFORMER_CONFIRMATION.value))
-            )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-                    changed_by_user_id=client_id,
-                )
-            )
+#             await session.execute(
+#                 update(Order)
+#                 .where(Order.id == order_id)
+#                 .values(**_order_status_values(OrderStates.AWAITING_PERFORMER_CONFIRMATION.value))
+#             )
+#             await session.execute(
+#                 insert(OrderStatusHistory).values(
+#                     order_id=order_id,
+#                     old_status=(
+#                         current_status.value
+#                         if isinstance(current_status, OrderStates)
+#                         else current_status
+#                     ),
+#                     new_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+#                     changed_by_user_id=client_id,
+#                 )
+#             )
 
 
 async def performer_confirm_order(order_id: int, performer_id: int) -> None:
@@ -502,6 +502,12 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
 
 async def client_softdecline_order(order_id: int, client_id: int) -> None:
     """Переводим сделку в неуспешное завершение, если исполнитель еще не принял ее"""
+    payment_operation_id = await _get_softdecline_payment_operation_id(order_id, client_id)
+    await cancle_unpayment_deal(payment_operation_id)
+    await _set_softdeclined_order_status(order_id, client_id)
+
+
+async def _get_softdecline_payment_operation_id(order_id: int, client_id: int) -> int:
     async with AsyncSessionLocal() as session:
         async with session.begin():
             client_exists = await session.scalar(
@@ -511,17 +517,41 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
                 raise UserNotFoundError()
 
             order_data = await session.execute(
-                select(Order.status, Order.performer_id)
+                select(
+                    Order.performer_id,
+                    OrderPaymentData.paygine_payment_operation_id,
+                    OrderPaymentData.status,
+                )
+                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
                 .where(Order.id == order_id, Order.client_id == client_id)
                 .with_for_update()
             )
             order_row = order_data.one_or_none()
             if order_row is None:
                 raise OrderNotFoundError()
-            current_status, performer_id = order_row
+            performer_id, payment_operation_id, payment_status = order_row
             if performer_id is not None:
                 raise OrderAlreadyAcceptedError()
+            _ensure_registered_order_payment_status(payment_status)
+            return int(payment_operation_id)
 
+
+async def _set_softdeclined_order_status(order_id: int, client_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            order_data = await session.execute(
+                select(Order.status, Order.performer_id, OrderPaymentData.status)
+                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+                .where(Order.id == order_id, Order.client_id == client_id)
+                .with_for_update()
+            )
+            order_row = order_data.one_or_none()
+            if order_row is None:
+                raise OrderNotFoundError()
+            current_status, performer_id, payment_status = order_row
+            if performer_id is not None:
+                raise OrderAlreadyAcceptedError()
+            _ensure_registered_order_payment_status(payment_status)
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
@@ -538,6 +568,11 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
                     new_status=OrderStates.UNSUCCESSFUL_COMPLETION.value,
                     changed_by_user_id=client_id,
                 )
+            )
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.order_id == order_id)
+                .values(status=OrderPaymentStates.EXPIRED.value)
             )
 
 
