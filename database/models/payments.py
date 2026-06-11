@@ -21,7 +21,9 @@ class OrderPaymentData(Base):
     __tablename__ = "orders_payment_data"
     __table_args__ = (
         Index("ix_orders_payment_data_order_id", "order_id", unique=True),
-        Index("ix_orders_payment_data_status", "status"),
+        Index("ix_orders_payment_data_payment_status", "payment_status"),
+        Index("ix_orders_payment_data_payout_status", "payout_status"),
+        Index("ix_orders_payment_data_revoke_status", "revoke_status"),
         Index(
             "ix_orders_payment_data_paygine_payment_operation_id",
             "paygine_payment_operation_id",
@@ -49,11 +51,19 @@ class OrderPaymentData(Base):
     )
     order_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     service_fee_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    status: Mapped[OrderPaymentStates] = mapped_column(
-        enum_column(OrderPaymentStates, "order_payment_states"),
+    payment_status: Mapped[OrderPaymentStates] = mapped_column(
+        enum_column(OrderPaymentStates, "order_payment_status_states"),
         nullable=False,
         default=OrderPaymentStates.REGISTERED,
         server_default=OrderPaymentStates.REGISTERED.value,
+    )
+    payout_status: Mapped[OrderPaymentStates | None] = mapped_column(
+        enum_column(OrderPaymentStates, "order_payout_status_states"),
+        nullable=True,
+    )
+    revoke_status: Mapped[OrderPaymentStates | None] = mapped_column(
+        enum_column(OrderPaymentStates, "order_revoke_status_states"),
+        nullable=True,
     )
     paygine_payment_operation_id: Mapped[str] = mapped_column(
         String(64),
@@ -63,14 +73,17 @@ class OrderPaymentData(Base):
         String(64),
         nullable=True,
     )
-    paygine_refund_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    paygine_revoked_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     payout_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_complete_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

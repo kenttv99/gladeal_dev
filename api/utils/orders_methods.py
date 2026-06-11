@@ -135,7 +135,10 @@ async def get_order_link(order_id: int, client_id: int) -> str:
 async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            select(OrderPaymentData.paygine_payment_operation_id, OrderPaymentData.status)
+            select(
+                OrderPaymentData.paygine_payment_operation_id,
+                OrderPaymentData.payment_status,
+            )
             .join(Order, Order.id == OrderPaymentData.order_id)
             .where(Order.id == order_id, Order.client_id == client_id)
         )
@@ -149,7 +152,10 @@ async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
 async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int:
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            select(OrderPaymentData.paygine_payout_operation_id, OrderPaymentData.status)
+            select(
+                OrderPaymentData.paygine_payout_operation_id,
+                OrderPaymentData.payout_status,
+            )
             .join(Order, Order.id == OrderPaymentData.order_id)
             .where(Order.id == order_id, Order.performer_id == performer_id)
         )
@@ -289,7 +295,7 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             )
 
 
-async def client_confirm_order(order_id: int, client_id: int, performer_email: str) -> None:
+async def client_confirm_order(order_id: int, client_id: int) -> None:
     """Переводим сделку в состояние успешного завершения и ожидания получения выплаты исполнителем"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
@@ -299,7 +305,7 @@ async def client_confirm_order(order_id: int, client_id: int, performer_email: s
                 RegisterPayoutDealPaymentRequest(
                     order_id=order_id,
                     performer_id=payment_data.performer_id,
-                    performer_email=performer_email,
+                    performer_email=payment_data.performer_email,
                     performer_phone=payment_data.performer_phone,
                     amount=payment_data.price,
                     expires_at=payment_data.expire_in,
@@ -311,7 +317,6 @@ async def client_confirm_order(order_id: int, client_id: int, performer_email: s
                 order_id,
                 payment_data.current_status,
                 client_id,
-                performer_email,
                 payout_result.payment_values.paygine_payout_operation_id,
             )
 

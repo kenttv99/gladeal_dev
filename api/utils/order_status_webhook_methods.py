@@ -44,7 +44,7 @@ async def authorize_order_payment_from_webhook(payload: dict[str, object]) -> No
             payment_data_id = await session.scalar(
                 update(OrderPaymentData)
                 .where(OrderPaymentData.order_id == order_id)
-                .values(status=OrderPaymentStates.AUTHORIZED.value)
+                .values(payment_status=OrderPaymentStates.AUTHORIZED.value)
                 .returning(OrderPaymentData.id)
             )
             if payment_data_id is None:

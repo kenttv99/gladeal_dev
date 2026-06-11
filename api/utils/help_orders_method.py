@@ -45,6 +45,7 @@ CLOSED_ORDER_STATUSES = (
 class ClientConfirmPaymentData:
     current_status: OrderStates | str | None
     performer_id: int
+    performer_email: str
     performer_phone: str
     price: Decimal
     expire_in: datetime
@@ -85,12 +86,12 @@ def order_status_values(status: str) -> dict[str, object]:
     return values
 
 
-def ensure_registered_order_payment_status(status: OrderPaymentStates | str) -> None:
+def ensure_registered_order_payment_status(status: OrderPaymentStates | str | None) -> None:
     ensure_order_payment_status(status, OrderPaymentStates.REGISTERED)
 
 
 def ensure_order_payment_status(
-    status: OrderPaymentStates | str,
+    status: OrderPaymentStates | str | None,
     expected_status: OrderPaymentStates,
 ) -> None:
     status_value = status.value if isinstance(status, OrderPaymentStates) else status
@@ -236,7 +237,8 @@ async def get_client_confirm_payment_data(
             Order.expire_in,
             Order.title,
             OrderPaymentData.paygine_payment_operation_id,
-            OrderPaymentData.status,
+            OrderPaymentData.payment_status,
+            OrderPaymentData.performer_email,
             User.phone_number,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
@@ -256,6 +258,7 @@ async def get_client_confirm_payment_data(
         title,
         payment_operation_id,
         payment_status,
+        performer_email,
         performer_phone,
     ) = row
     if order_status_value(current_status) != OrderStates.AWAITING_CLIENT_CONFIRMATION.value:
@@ -264,12 +267,15 @@ async def get_client_confirm_payment_data(
         raise ValidationError()
     if payment_operation_id is None:
         raise OrderNotFoundError()
+    if not performer_email:
+        raise ValidationError()
     if performer_phone is None:
         raise UserNotFoundError()
     ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
     return ClientConfirmPaymentData(
         current_status=current_status,
         performer_id=performer_id,
+        performer_email=performer_email,
         performer_phone=performer_phone,
         price=price,
         expire_in=expire_in,
@@ -283,7 +289,6 @@ async def set_client_confirmed_order_status(
     order_id: int,
     current_status: OrderStates | str | None,
     client_id: int,
-    performer_email: str,
     payout_operation_id: str,
 ) -> None:
     await session.execute(
@@ -302,9 +307,10 @@ async def set_client_confirmed_order_status(
         update(OrderPaymentData)
         .where(OrderPaymentData.order_id == order_id)
         .values(
-            performer_email=performer_email,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payment_complete_at=func.now(),
             paygine_payout_operation_id=payout_operation_id,
-            status=OrderPaymentStates.REGISTERED.value,
+            payout_status=OrderPaymentStates.REGISTERED.value,
         )
     )
 
@@ -320,7 +326,7 @@ async def get_softdecline_payment_operation_id(
             Order.status,
             Order.performer_id,
             OrderPaymentData.paygine_payment_operation_id,
-            OrderPaymentData.status,
+            OrderPaymentData.payment_status,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
         .where(Order.id == order_id, Order.client_id == client_id)
@@ -360,7 +366,7 @@ async def set_softdeclined_order_status(
     await session.execute(
         update(OrderPaymentData)
         .where(OrderPaymentData.order_id == order_id)
-        .values(status=OrderPaymentStates.EXPIRED.value)
+        .values(payment_status=OrderPaymentStates.EXPIRED.value)
     )
 
 
