@@ -79,15 +79,14 @@ async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError) -
         exc_info=(type(exc), exc, exc.__traceback__),
     )
     lang = request.headers.get("accept-language")
-    details = getattr(exc, "payment_data", None)
-    error_code = "PAYMENT_DATA_SAVE_FAILED" if details else "INTERNAL_SERVER_ERROR"
-    content = {
-        "error": error_code,
-        "message": translate(lang, error_code),
-    }
-    if details:
-        content["details"] = details
-    return JSONResponse(status_code=500, content=content)
+    error_code = "INTERNAL_SERVER_ERROR"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": error_code,
+            "message": translate(lang, error_code),
+        },
+    )
 
 
 async def xml_parse_exception_handler(request: Request, exc: ParseError) -> JSONResponse:

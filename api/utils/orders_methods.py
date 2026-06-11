@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import exists, func, insert, select, update
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates, UserRoles
 from api.exceptions import (
@@ -155,29 +155,15 @@ async def _create_order_payment_data(
     customer_email: str,
     payment_values: dict[str, object],
 ) -> None:
-    try:
-        async with AsyncSessionLocal() as session:
-            async with session.begin():
-                await session.execute(
-                    insert(OrderPaymentData).values(
-                        order_id=order_id,
-                        customer_email=customer_email,
-                        **payment_values,
-                    )
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                insert(OrderPaymentData).values(
+                    order_id=order_id,
+                    customer_email=customer_email,
+                    **payment_values,
                 )
-    except SQLAlchemyError as exc:
-        exc.payment_data = {
-            "order_id": order_id,
-            **{
-                key: value.isoformat()
-                if isinstance(value, datetime)
-                else str(value)
-                if isinstance(value, Decimal)
-                else value
-                for key, value in payment_values.items()
-            },
-        }
-        raise
+            )
 
 
 async def get_order_link(order_id: int, client_id: int) -> str:

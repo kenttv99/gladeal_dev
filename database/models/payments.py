@@ -52,8 +52,8 @@ class OrderPaymentData(Base):
     status: Mapped[OrderPaymentStates] = mapped_column(
         enum_column(OrderPaymentStates, "order_payment_states"),
         nullable=False,
-        default=OrderPaymentStates.CREATED,
-        server_default=OrderPaymentStates.CREATED.value,
+        default=OrderPaymentStates.REGISTERED,
+        server_default=OrderPaymentStates.REGISTERED.value,
     )
     paygine_payment_operation_id: Mapped[str] = mapped_column(
         String(64),
@@ -65,7 +65,7 @@ class OrderPaymentData(Base):
     )
     paygine_refund_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    
+
     payout_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
