@@ -1,54 +1,35 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import exists, func, insert, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import OrderPaymentStates, OrderStates, UserRoles
+from api.enums.enums_v1 import OrderStates, UserRoles
 from api.exceptions import (
-    MonthOrdersLimitExceededError,
-    OrderPaymentInvalidStatusError,
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderSelfExecutionForbiddenError,
-    UserNotFoundError,
     ValidationError,
 )
 from api.payments.payments_methods import cancle_unpayment_deal, register_deposit_deal
 from api.schemas.schemas_v1 import CreateOrderResponse, OrderInfoResponse, RegisterDepositDealPaymentRequest
-from api.utils.help_orders_method import check_user_month_orders_limit
-from api.utils.help_orders_method import generate_order_link, generate_order_slug
+from api.utils.help_orders_method import (
+    ACTIVE_ORDER_STATUSES,
+    CLOSED_ORDER_STATUSES,
+    add_order_status_history,
+    create_order_payment_data,
+    create_order_record,
+    ensure_registered_order_payment_status,
+    ensure_user_exists,
+    generate_order_link,
+    get_softdecline_payment_operation_id,
+    order_status_value,
+    order_status_values,
+    set_softdeclined_order_status,
+)
 from database.config import AsyncSessionLocal
-from database.models.orders import Order, OrderStatusHistory
+from database.models.orders import Order
 from database.models.payments import OrderPaymentData
-from database.models.users import User
-
-
-ACTIVE_ORDER_STATUSES = (
-    OrderStates.AWAITING_PERFORMER.value,
-    OrderStates.AWAITING_PAYMENT.value,
-    OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-    OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
-    OrderStates.AWAITING_CONFLICT.value,
-    OrderStates.OPEN_CONFLICT.value,
-    OrderStates.AWAITING_PERFORMER_PAYOUT.value
-)
-
-CLOSED_ORDER_STATUSES = (
-    OrderStates.SUCCESSFUL_COMPLETION.value,
-    OrderStates.UNSUCCESSFUL_COMPLETION.value,
-    OrderStates.CANCLED_BY_EXPIRE_TIME.value,
-    OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
-    OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-    OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
-)
-
-
-def _order_status_values(status: str) -> dict[str, object]:
-    values: dict[str, object] = {"status": status}
-    if status == OrderStates.AWAITING_CLIENT_CONFIRMATION.value or status in CLOSED_ORDER_STATUSES:
-        values["completed_at"] = func.now()
-    return values
 
 
 async def create_order(
@@ -61,22 +42,32 @@ async def create_order(
     price: Decimal,
     expire_in: datetime,
 ) -> CreateOrderResponse:
-    
     """
     Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env, производит запрос к платежной системе, получает ответ и записывает данные в таблицы.
     Состояние дублируется в таблицу историй состояний сделки.
-    
+
     """
 
-    order, customer_phone = await _create_order_record(
-        client_id=client_id,
-        title=title,
-        conditions=conditions,
-        result_requirements=result_requirements,
-        violation_proof_requirements=violation_proof_requirements,
-        price=price,
-        expire_in=expire_in,
-    )
+    while True:
+        async with AsyncSessionLocal() as session:
+            try:
+                async with session.begin():
+                    order, customer_phone = await create_order_record(
+                        session=session,
+                        client_id=client_id,
+                        title=title,
+                        conditions=conditions,
+                        result_requirements=result_requirements,
+                        violation_proof_requirements=violation_proof_requirements,
+                        price=price,
+                        expire_in=expire_in,
+                    )
+                break
+            except IntegrityError as exc:
+                if "uq_orders_slug" in str(exc.orig):
+                    continue
+                raise
+
     payment_result = await register_deposit_deal(
         RegisterDepositDealPaymentRequest(
             order_id=order.id,
@@ -88,93 +79,25 @@ async def create_order(
             description=order.title,
         )
     )
-    await _create_order_payment_data(
-        order.id,
-        customer_email,
-        payment_result.payment_values.model_dump(),
-    )
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await create_order_payment_data(
+                session,
+                order.id,
+                customer_email,
+                payment_result.payment_values.model_dump(),
+            )
     return CreateOrderResponse(
         **OrderInfoResponse.model_validate(order).model_dump(),
         service_fee_amount=payment_result.payment_values.service_fee_amount,
     )
 
 
-async def _create_order_record(
-    client_id: int,
-    title: str,
-    conditions: str,
-    result_requirements: str,
-    violation_proof_requirements: str,
-    price: Decimal,
-    expire_in: datetime,
-) -> tuple[Order, str]:
-    while True:
-        async with AsyncSessionLocal() as session:
-            try:
-                async with session.begin():
-                    customer_phone = await session.scalar(
-                        select(User.phone_number).where(User.id == client_id)
-                    )
-                    if customer_phone is None:
-                        raise UserNotFoundError()
-
-                    limit_check = await check_user_month_orders_limit(session, client_id, price)
-                    if limit_check["is_limit_exceeded"]:
-                        raise MonthOrdersLimitExceededError(details=limit_check)
-
-                    result = await session.execute(
-                        insert(Order)
-                        .values(
-                            client_id=client_id,
-                            title=title,
-                            conditions=conditions,
-                            result_requirements=result_requirements,
-                            violation_proof_requirements=violation_proof_requirements,
-                            slug=await generate_order_slug(session),
-                            price=price,
-                            expire_in=expire_in,
-                            status=OrderStates.AWAITING_PERFORMER.value,
-                        )
-                        .returning(Order)
-                    )
-                    order = result.scalar_one()
-
-                    await session.execute(
-                        insert(OrderStatusHistory).values(
-                            order_id=order.id,
-                            old_status=None,
-                            new_status=OrderStates.AWAITING_PERFORMER.value,
-                            changed_by_user_id=client_id,
-                        )
-                    )
-                    return order, customer_phone
-            except IntegrityError as exc:
-                if "uq_orders_slug" in str(exc.orig):
-                    continue
-                raise
-
-
-async def _create_order_payment_data(
-    order_id: int,
-    customer_email: str,
-    payment_values: dict[str, object],
-) -> None:
-    async with AsyncSessionLocal() as session:
-        async with session.begin():
-            await session.execute(
-                insert(OrderPaymentData).values(
-                    order_id=order_id,
-                    customer_email=customer_email,
-                    **payment_values,
-                )
-            )
-
-
 async def get_order_link(order_id: int, client_id: int) -> str:
 
     """
     Метод получает slug ордера и генерирует полноценную ссылку для перехода на страницу с информацией о сделке
-    
+
     """
 
     async with AsyncSessionLocal() as session:
@@ -196,7 +119,7 @@ async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
         row = result.one_or_none()
         if row is None or row[0] is None:
             raise OrderNotFoundError()
-        _ensure_registered_order_payment_status(row[1])
+        ensure_registered_order_payment_status(row[1])
         return int(row[0])
 
 
@@ -210,14 +133,8 @@ async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int
         row = result.one_or_none()
         if row is None or row[0] is None:
             raise OrderNotFoundError()
-        _ensure_registered_order_payment_status(row[1])
+        ensure_registered_order_payment_status(row[1])
         return int(row[0])
-
-
-def _ensure_registered_order_payment_status(status: OrderPaymentStates | str) -> None:
-    status_value = status.value if isinstance(status, OrderPaymentStates) else status
-    if status_value != OrderPaymentStates.REGISTERED.value:
-        raise OrderPaymentInvalidStatusError()
 
 
 async def get_order_by_slug(slug: str, authorized_user_id: int) -> Order:
@@ -254,11 +171,7 @@ async def approve_order(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние ожидания оплаты"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            performer_exists = await session.scalar(
-                select(exists().where(User.id == performer_id))
-            )
-            if not performer_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
                 select(Order.status, Order.performer_id, Order.client_id)
@@ -271,11 +184,7 @@ async def approve_order(order_id: int, performer_id: int) -> None:
             current_status, current_performer_id, client_id = order_row
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
-            current_status_value = (
-                current_status.value
-                if isinstance(current_status, OrderStates)
-                else current_status
-            )
+            current_status_value = order_status_value(current_status)
             if (
                 current_performer_id is not None
                 or current_status_value != OrderStates.AWAITING_PERFORMER.value
@@ -287,65 +196,23 @@ async def approve_order(order_id: int, performer_id: int) -> None:
                 .where(Order.id == order_id)
                 .values(
                     performer_id=performer_id,
-                    **_order_status_values(OrderStates.AWAITING_PAYMENT.value),
+                    **order_status_values(OrderStates.AWAITING_PAYMENT.value),
                 )
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=current_status_value,
-                    new_status=OrderStates.AWAITING_PAYMENT.value,
-                    changed_by_user_id=performer_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status_value,
+                OrderStates.AWAITING_PAYMENT.value,
+                performer_id,
             )
-
-
-# async def payment_order(order_id: int, client_id: int) -> None:
-#     """Переводим сделку в состояние после оплаты и ожидания выполнения сделки со стороны исполнителя"""
-#     async with AsyncSessionLocal() as session:
-#         async with session.begin():
-#             client_exists = await session.scalar(
-#                 select(exists().where(User.id == client_id))
-#             )
-#             if not client_exists:
-#                 raise UserNotFoundError()
-
-#             current_status = await session.scalar(
-#                 select(Order.status)
-#                 .where(Order.id == order_id, Order.client_id == client_id)
-#                 .with_for_update()
-#             )
-#             if current_status is None:
-#                 raise OrderNotFoundError()
-
-#             await session.execute(
-#                 update(Order)
-#                 .where(Order.id == order_id)
-#                 .values(**_order_status_values(OrderStates.AWAITING_PERFORMER_CONFIRMATION.value))
-#             )
-#             await session.execute(
-#                 insert(OrderStatusHistory).values(
-#                     order_id=order_id,
-#                     old_status=(
-#                         current_status.value
-#                         if isinstance(current_status, OrderStates)
-#                         else current_status
-#                     ),
-#                     new_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-#                     changed_by_user_id=client_id,
-#                 )
-#             )
 
 
 async def performer_confirm_order(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние ожидания подтверждения заказчиком"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            performer_exists = await session.scalar(
-                select(exists().where(User.id == performer_id))
-            )
-            if not performer_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
                 select(Order.status, Order.client_id)
@@ -362,19 +229,14 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.AWAITING_CLIENT_CONFIRMATION.value))
+                .values(**order_status_values(OrderStates.AWAITING_CLIENT_CONFIRMATION.value))
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
-                    changed_by_user_id=performer_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+                performer_id,
             )
 
 
@@ -382,11 +244,7 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
     """Переводим сделку в состояние успешного завершения и ожидания получения выплаты исполнителем"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            client_exists = await session.scalar(
-                select(exists().where(User.id == client_id))
-            )
-            if not client_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, client_id)
 
             current_status = await session.scalar(
                 select(Order.status)
@@ -399,19 +257,14 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value))
+                .values(**order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value))
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.AWAITING_PERFORMER_PAYOUT.value,
-                    changed_by_user_id=client_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+                client_id,
             )
 
 
@@ -419,11 +272,7 @@ async def performer_order_payout(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние успешного завершения после выплаты исполнителю"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            performer_exists = await session.scalar(
-                select(exists().where(User.id == performer_id))
-            )
-            if not performer_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
                 select(Order.status, Order.client_id)
@@ -436,26 +285,21 @@ async def performer_order_payout(order_id: int, performer_id: int) -> None:
             current_status, client_id = order_row
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
-            current_status_value = (
-                current_status.value
-                if isinstance(current_status, OrderStates)
-                else current_status
-            )
+            current_status_value = order_status_value(current_status)
             if current_status_value != OrderStates.AWAITING_PERFORMER_PAYOUT.value:
                 raise ValidationError()
 
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
+                .values(**order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=current_status_value,
-                    new_status=OrderStates.SUCCESSFUL_COMPLETION.value,
-                    changed_by_user_id=performer_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status_value,
+                OrderStates.SUCCESSFUL_COMPLETION.value,
+                performer_id,
             )
 
 
@@ -463,11 +307,7 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние неуспешного завершения по отказу исполнителя"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            performer_exists = await session.scalar(
-                select(exists().where(User.id == performer_id))
-            )
-            if not performer_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
                 select(Order.status, Order.client_id)
@@ -484,107 +324,35 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
+                .values(**order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.UNSUCCESSFUL_COMPLETION.value,
-                    changed_by_user_id=performer_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.UNSUCCESSFUL_COMPLETION.value,
+                performer_id,
             )
 
 
 async def client_softdecline_order(order_id: int, client_id: int) -> None:
     """Переводим сделку в неуспешное завершение, если исполнитель еще не принял ее"""
-    payment_operation_id = await _get_softdecline_payment_operation_id(order_id, client_id)
-    await cancle_unpayment_deal(payment_operation_id)
-    await _set_softdeclined_order_status(order_id, client_id)
-
-
-async def _get_softdecline_payment_operation_id(order_id: int, client_id: int) -> int:
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            client_exists = await session.scalar(
-                select(exists().where(User.id == client_id))
+            payment_operation_id, current_status = await get_softdecline_payment_operation_id(
+                session,
+                order_id,
+                client_id,
             )
-            if not client_exists:
-                raise UserNotFoundError()
-
-            order_data = await session.execute(
-                select(
-                    Order.performer_id,
-                    OrderPaymentData.paygine_payment_operation_id,
-                    OrderPaymentData.status,
-                )
-                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
-                .where(Order.id == order_id, Order.client_id == client_id)
-                .with_for_update()
-            )
-            order_row = order_data.one_or_none()
-            if order_row is None:
-                raise OrderNotFoundError()
-            performer_id, payment_operation_id, payment_status = order_row
-            if performer_id is not None:
-                raise OrderAlreadyAcceptedError()
-            _ensure_registered_order_payment_status(payment_status)
-            return int(payment_operation_id)
-
-
-async def _set_softdeclined_order_status(order_id: int, client_id: int) -> None:
-    async with AsyncSessionLocal() as session:
-        async with session.begin():
-            order_data = await session.execute(
-                select(Order.status, Order.performer_id, OrderPaymentData.status)
-                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
-                .where(Order.id == order_id, Order.client_id == client_id)
-                .with_for_update()
-            )
-            order_row = order_data.one_or_none()
-            if order_row is None:
-                raise OrderNotFoundError()
-            current_status, performer_id, payment_status = order_row
-            if performer_id is not None:
-                raise OrderAlreadyAcceptedError()
-            _ensure_registered_order_payment_status(payment_status)
-            await session.execute(
-                update(Order)
-                .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
-            )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.UNSUCCESSFUL_COMPLETION.value,
-                    changed_by_user_id=client_id,
-                )
-            )
-            await session.execute(
-                update(OrderPaymentData)
-                .where(OrderPaymentData.order_id == order_id)
-                .values(status=OrderPaymentStates.EXPIRED.value)
-            )
+            await cancle_unpayment_deal(payment_operation_id)
+            await set_softdeclined_order_status(session, order_id, current_status, client_id)
 
 
 async def client_harddecline_order(order_id: int, client_id: int) -> None:
     """Переводим сделку в состояние ожидания подтверждения отказа исполнителем"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            client_exists = await session.scalar(
-                select(exists().where(User.id == client_id))
-            )
-            if not client_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, client_id)
 
             current_status = await session.scalar(
                 select(Order.status)
@@ -597,19 +365,14 @@ async def client_harddecline_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.AWAITING_CONFLICT.value))
+                .values(**order_status_values(OrderStates.AWAITING_CONFLICT.value))
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.AWAITING_CONFLICT.value,
-                    changed_by_user_id=client_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.AWAITING_CONFLICT.value,
+                client_id,
             )
 
 
@@ -617,11 +380,7 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние открытого спора исполнителем"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            performer_exists = await session.scalar(
-                select(exists().where(User.id == performer_id))
-            )
-            if not performer_exists:
-                raise UserNotFoundError()
+            await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
                 select(Order.status, Order.client_id)
@@ -638,19 +397,14 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**_order_status_values(OrderStates.OPEN_CONFLICT.value))
+                .values(**order_status_values(OrderStates.OPEN_CONFLICT.value))
             )
-            await session.execute(
-                insert(OrderStatusHistory).values(
-                    order_id=order_id,
-                    old_status=(
-                        current_status.value
-                        if isinstance(current_status, OrderStates)
-                        else current_status
-                    ),
-                    new_status=OrderStates.OPEN_CONFLICT.value,
-                    changed_by_user_id=performer_id,
-                )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.OPEN_CONFLICT.value,
+                performer_id,
             )
 
 
