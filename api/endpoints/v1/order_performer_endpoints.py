@@ -9,6 +9,7 @@ from api.schemas.schemas_v1 import (
     PerformerConfirmOrderRequest,
     PerformerConflictOrderRequest,
     PerformerDeclineOrderRequest,
+    PayoutLinkRequest,
 )
 from api.utils.orders_methods import (
     approve_order,
@@ -72,10 +73,10 @@ async def deal_conflict(
 
 @router.get("/deal_payout_link")
 async def deal_payout_link(
-    order_id: int,
+    order: PayoutLinkRequest = Depends(),
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, str]:
-    operation_id = await get_order_payout_operation_id(order_id, authorized_user_id)
+    operation_id = await get_order_payout_operation_id(order.order_id, authorized_user_id)
     link = await generate_withdrow_link(
         GenerateWithdrowLinkRequest(paygine_payout_operation_id=operation_id)
     )

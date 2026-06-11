@@ -98,6 +98,10 @@ class PaymentOrderRequest(BaseModel):
     user_id: int
 
 
+class PaymentLinkRequest(BaseModel):
+    order_id: int
+
+
 class PerformerConfirmOrderRequest(BaseModel):
     order_id: int
     user_id: int
@@ -106,6 +110,10 @@ class PerformerConfirmOrderRequest(BaseModel):
 class PerformerPayoutOrderRequest(BaseModel):
     order_id: int
     user_id: int
+
+
+class PayoutLinkRequest(BaseModel):
+    order_id: int
 
 
 class ClientConfirmOrderRequest(BaseModel):

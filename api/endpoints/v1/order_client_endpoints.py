@@ -11,6 +11,7 @@ from api.schemas.schemas_v1 import (
     GeneratePaymentLinkRequest,
     OrderInfoRequest,
     OrderInfoResponse,
+    PaymentLinkRequest,
     PaymentOrderRequest,
 )
 from api.utils.orders_methods import (
@@ -105,10 +106,10 @@ async def deals_archive(authorized_user_id: int = Depends(authorize_user)):
 
 @router.get("/deal_payment_link")
 async def deal_payment_link(
-    order_id: int,
+    order: PaymentLinkRequest = Depends(),
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, str]:
-    operation_id = await get_order_payment_operation_id(order_id, authorized_user_id)
+    operation_id = await get_order_payment_operation_id(order.order_id, authorized_user_id)
     link = await generate_payment_link(
         GeneratePaymentLinkRequest(paygine_payment_operation_id=operation_id)
     )
