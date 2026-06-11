@@ -19,6 +19,7 @@ from api.utils.help_orders_method import (
     add_order_status_history,
     create_order_payment_data,
     create_order_record,
+    delete_order_record,
     ensure_registered_order_payment_status,
     ensure_user_exists,
     generate_order_link,
@@ -68,17 +69,24 @@ async def create_order(
                     continue
                 raise
 
-    payment_result = await register_deposit_deal(
-        RegisterDepositDealPaymentRequest(
-            order_id=order.id,
-            client_id=order.client_id,
-            customer_email=customer_email,
-            customer_phone=customer_phone,
-            amount=order.price,
-            expires_at=order.expire_in,
-            description=order.title,
+    try:
+        payment_result = await register_deposit_deal(
+            RegisterDepositDealPaymentRequest(
+                order_id=order.id,
+                client_id=order.client_id,
+                customer_email=customer_email,
+                customer_phone=customer_phone,
+                amount=order.price,
+                expires_at=order.expire_in,
+                description=order.title,
+            )
         )
-    )
+    except Exception:
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                await delete_order_record(session, order.id, client_id)
+        raise
+
     async with AsyncSessionLocal() as session:
         async with session.begin():
             await create_order_payment_data(

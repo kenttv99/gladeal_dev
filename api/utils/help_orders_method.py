@@ -2,7 +2,7 @@ from secrets import token_urlsafe
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import exists, func, insert, select, update
+from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import BASE_SITE_LINK, MONTH_SUM_LIMIT_PER_USER
@@ -150,6 +150,23 @@ async def create_order_payment_data(
             customer_email=customer_email,
             **payment_values,
         )
+    )
+
+
+async def delete_order_record(
+    session: AsyncSession,
+    order_id: int,
+    client_id: int,
+) -> None:
+    order_query = select(Order.id).where(Order.id == order_id, Order.client_id == client_id)
+    await session.execute(
+        delete(OrderPaymentData).where(OrderPaymentData.order_id.in_(order_query))
+    )
+    await session.execute(
+        delete(OrderStatusHistory).where(OrderStatusHistory.order_id.in_(order_query))
+    )
+    await session.execute(
+        delete(Order).where(Order.id == order_id, Order.client_id == client_id)
     )
 
 
