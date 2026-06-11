@@ -185,6 +185,30 @@ async def get_order_link(order_id: int, client_id: int) -> str:
         return generate_order_link(slug)
 
 
+async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
+    async with AsyncSessionLocal() as session:
+        operation_id = await session.scalar(
+            select(OrderPaymentData.paygine_payment_operation_id)
+            .join(Order, Order.id == OrderPaymentData.order_id)
+            .where(Order.id == order_id, Order.client_id == client_id)
+        )
+        if operation_id is None:
+            raise OrderNotFoundError()
+        return int(operation_id)
+
+
+async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int:
+    async with AsyncSessionLocal() as session:
+        operation_id = await session.scalar(
+            select(OrderPaymentData.paygine_payout_operation_id)
+            .join(Order, Order.id == OrderPaymentData.order_id)
+            .where(Order.id == order_id, Order.performer_id == performer_id)
+        )
+        if operation_id is None:
+            raise OrderNotFoundError()
+        return int(operation_id)
+
+
 async def get_order_by_slug(slug: str, authorized_user_id: int) -> Order:
     """Достаем информацию об ордере по слагу"""
     async with AsyncSessionLocal() as session:

@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends
 
 from api.enums.enums_v1 import UserRoles
+from api.payments.payments_methods import generate_payment_link
 from api.schemas.schemas_v1 import (
     ClientConfirmOrderRequest,
     ClientHardDeclineOrderRequest,
     ClientSoftDeclineOrderRequest,
     CreateOrderRequest,
     CreateOrderResponse,
+    GeneratePaymentLinkRequest,
     OrderInfoRequest,
     OrderInfoResponse,
     PaymentOrderRequest,
@@ -20,6 +22,7 @@ from api.utils.orders_methods import (
     get_client_closed_orders,
     get_order_by_slug,
     get_order_link,
+    get_order_payment_operation_id,
     payment_order,
 )
 from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id
@@ -99,3 +102,14 @@ async def deal_harddecline(
 @router.get("/deals_archive", response_model=list[OrderInfoResponse])
 async def deals_archive(authorized_user_id: int = Depends(authorize_user)):
     return await get_client_closed_orders(authorized_user_id)
+
+@router.get("/deal_payment_link")
+async def deal_payment_link(
+    order_id: int,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, str]:
+    operation_id = await get_order_payment_operation_id(order_id, authorized_user_id)
+    link = await generate_payment_link(
+        GeneratePaymentLinkRequest(paygine_payment_operation_id=operation_id)
+    )
+    return {"link": link}

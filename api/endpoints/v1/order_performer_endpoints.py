@@ -1,22 +1,23 @@
 from fastapi import APIRouter, Depends
 
 from api.enums.enums_v1 import UserRoles
+from api.payments.payments_methods import generate_withdrow_link
 from api.schemas.schemas_v1 import (
     ApproveOrderRequest,
+    GenerateWithdrowLinkRequest,
     OrderInfoResponse,
     PerformerConfirmOrderRequest,
     PerformerConflictOrderRequest,
     PerformerDeclineOrderRequest,
-    PerformerPayoutOrderRequest,
 )
 from api.utils.orders_methods import (
     approve_order,
     get_active_orders_by_role,
+    get_order_payout_operation_id,
     get_performer_closed_orders,
     performer_confirm_order,
     performer_conflict_order,
     performer_decline_order,
-    performer_order_payout,
 )
 from api.utils.jwt_methods import authorize_user, ensure_authorized_user_id
 
@@ -69,14 +70,16 @@ async def deal_conflict(
     return {"success": True}
 
 
-# @router.post("/deal_payout")
-# async def deal_payout(
-#     order: PerformerPayoutOrderRequest,
-#     authorized_user_id: int = Depends(authorize_user),
-# ) -> dict[str, bool]:
-#     ensure_authorized_user_id(order.user_id, authorized_user_id)
-#     await performer_order_payout(order.order_id, order.user_id)
-#     return {"success": True}
+@router.get("/deal_payout_link")
+async def deal_payout_link(
+    order_id: int,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, str]:
+    operation_id = await get_order_payout_operation_id(order_id, authorized_user_id)
+    link = await generate_withdrow_link(
+        GenerateWithdrowLinkRequest(paygine_payout_operation_id=operation_id)
+    )
+    return {"link": link}
 
 
 @router.get("/deals_archive", response_model=list[OrderInfoResponse])
