@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 
 from api.enums.enums_v1 import UserRoles
 from api.payments.payments_methods import generate_withdrow_link
@@ -28,9 +28,10 @@ async def deals(authorized_user_id: int = Depends(authorize_user)):
 @router.post("/deal_approve")
 async def deal_approve(
     order_id: int,
+    performer_email: str | None = Body(None, embed=True),
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    await approve_order(order_id, authorized_user_id)
+    await approve_order(order_id, authorized_user_id, performer_email)
     return {"success": True}
 
 

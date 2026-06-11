@@ -9,6 +9,7 @@ from api.exceptions import (
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderSelfExecutionForbiddenError,
+    PerformerEmailRequiredError,
     ValidationError,
 )
 from api.payments.payments_methods import (
@@ -187,8 +188,15 @@ async def get_active_orders_by_role(role: UserRoles | str, user_id: int) -> list
         return list(result.all())
 
 
-async def approve_order(order_id: int, performer_id: int) -> None:
+async def approve_order(
+    order_id: int,
+    performer_id: int,
+    performer_email: str | None,
+) -> None:
     """Переводим сделку в состояние ожидания оплаты"""
+    if not performer_email:
+        raise PerformerEmailRequiredError()
+
     async with AsyncSessionLocal() as session:
         async with session.begin():
             await ensure_user_exists(session, performer_id)
@@ -219,6 +227,14 @@ async def approve_order(order_id: int, performer_id: int) -> None:
                     **order_status_values(OrderStates.AWAITING_PAYMENT.value),
                 )
             )
+            payment_data_id = await session.scalar(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.order_id == order_id)
+                .values(performer_email=performer_email)
+                .returning(OrderPaymentData.id)
+            )
+            if payment_data_id is None:
+                raise OrderNotFoundError()
             await add_order_status_history(
                 session,
                 order_id,

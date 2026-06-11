@@ -7,6 +7,7 @@
   "ORDER_NOT_FOUND": "Сделка не найдена.",
   "ORDER_ALREADY_ACCEPTED": "Невозможно отказаться от сделки: исполнитель уже принял ее к исполнению.",
   "ORDER_SELF_EXECUTION_FORBIDDEN": "Нельзя выступать исполнителем по собственной сделке.",
+  "PERFORMER_EMAIL_REQUIRED": "Email исполнителя обязателен.",
   "INVALID_CREDENTIALS": "Неверные данные авторизации.",
   "INVALID_ACCESS_TOKEN": "Некорректный access token.",
   "ACCESS_TOKEN_EXPIRED": "Срок действия access token истек.",

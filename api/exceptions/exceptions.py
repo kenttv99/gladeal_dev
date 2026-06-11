@@ -51,6 +51,11 @@ class OrderSelfExecutionForbiddenError(BaseAPIException):
     error_code = "ORDER_SELF_EXECUTION_FORBIDDEN"
 
 
+class PerformerEmailRequiredError(BaseAPIException):
+    status_code = 422
+    error_code = "PERFORMER_EMAIL_REQUIRED"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"
