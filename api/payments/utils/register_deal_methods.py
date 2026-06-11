@@ -4,6 +4,7 @@ from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR, SR_REF
 from api.payments.http_client import get_paygine_client
 from api.payments.utils.commission_methods import calculate_payment_amounts
+from api.payments.utils.phone_methods import normalize_paygine_phone
 from api.payments.utils.xml_response_parser import parse_paygine_response
 from api.schemas.schemas_v1 import (
     RegisterDealPaymentRequest,
@@ -44,7 +45,7 @@ def build_register_deal_payload(
         "notify_url": data.notify_url,
         "payer_id": data.customer.client_ref,
         "email": data.customer.email,
-        "phone": data.customer.phone,
+        "phone": normalize_paygine_phone(data.customer.phone),
     }
     payload["signature"] = build_signature(
         payload[field] for field in REGISTER_DEAL_SIGNATURE_FIELDS
@@ -67,7 +68,7 @@ def build_register_payout_deal_payload(
         "notify_url": data.notify_url,
         "client_ref": data.performer.client_ref,
         "email": data.performer.email,
-        "phone": data.performer.phone,
+        "phone": normalize_paygine_phone(data.performer.phone),
     }
     payload["signature"] = build_signature(
         payload[field] for field in REGISTER_DEAL_SIGNATURE_FIELDS

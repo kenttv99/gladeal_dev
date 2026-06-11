@@ -4,20 +4,16 @@ from decimal import Decimal
 from sqlalchemy import exists, func, insert, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from api.config import BASE_SITE_LINK
 from api.enums.enums_v1 import OrderStates, UserRoles
 from api.exceptions import (
     MonthOrdersLimitExceededError,
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderSelfExecutionForbiddenError,
-    PaymentInvalidProviderResponseError,
     UserNotFoundError,
     ValidationError,
 )
 from api.payments.payments_methods import register_deposit_deal
-from api.payments.utils.commission_methods import calculate_payment_amounts, from_kopecks
-from api.schemas.schemas_v1 import RegisterDealCustomer, RegisterDealPaymentRequest
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
 from database.config import AsyncSessionLocal
@@ -45,45 +41,12 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
 )
 
-PAYGINE_ORDER_STATUS_NOTIFY_PATH = "/v1/paygine/webhook_order_status"
-
 
 def _order_status_values(status: str) -> dict[str, object]:
     values: dict[str, object] = {"status": status}
     if status == OrderStates.AWAITING_CLIENT_CONFIRMATION.value or status in CLOSED_ORDER_STATUSES:
         values["completed_at"] = func.now()
     return values
-
-
-def _paygine_order_status_notify_url() -> str:
-    return f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}"
-
-
-def _paygine_payment_operation_id(response: dict[str, object]) -> str:
-    data = response.get("data")
-    if not isinstance(data, dict) or not data.get("id"):
-        raise PaymentInvalidProviderResponseError(details=response)
-    return str(data["id"])
-
-
-def _deposit_payment_request(
-    order: Order,
-    customer_email: str,
-    customer_phone: str,
-) -> RegisterDealPaymentRequest:
-    return RegisterDealPaymentRequest(
-        order_id=order.id,
-        customer=RegisterDealCustomer(
-            client_ref=str(order.client_id),
-            email=customer_email,
-            phone=customer_phone,
-        ),
-        amount=order.price,
-        expires_at=order.expire_in,
-        reference=f"gladeal-order-{order.id}",
-        description=order.title,
-        notify_url=_paygine_order_status_notify_url(),
-    )
 
 
 async def create_order(
@@ -99,7 +62,7 @@ async def create_order(
     
     """
     Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env
-    Состояние дублируется в таблицу историй состояний сделки.
+    Состояние дублируется в таблицу историй состояний сделки и сохраняется только после успешного запроса к ПЦ.
     
     """
 
@@ -112,9 +75,20 @@ async def create_order(
         price=price,
         expire_in=expire_in,
     )
-    payment_data = _deposit_payment_request(order, customer_email, customer_phone)
-    payment_response = await register_deposit_deal(payment_data)
-    await _create_order_payment_data(order, customer_email, payment_data, payment_response)
+    payment_result = await register_deposit_deal(
+        order_id=order.id,
+        client_id=order.client_id,
+        customer_email=customer_email,
+        customer_phone=customer_phone,
+        amount=order.price,
+        expires_at=order.expire_in,
+        description=order.title,
+    )
+    await _create_order_payment_data(
+        order.id,
+        customer_email,
+        payment_result.payment_values,
+    )
     return order
 
 
@@ -174,37 +148,31 @@ async def _create_order_record(
 
 
 async def _create_order_payment_data(
-    order: Order,
+    order_id: int,
     customer_email: str,
-    payment_data: RegisterDealPaymentRequest,
-    payment_response: dict[str, object],
+    payment_values: dict[str, object],
 ) -> None:
-    payment_amounts = calculate_payment_amounts(payment_data.amount)
-    payment_operation_id = _paygine_payment_operation_id(payment_response)
-    order_amount = from_kopecks(payment_amounts["order_amount"])
-    service_fee_amount = from_kopecks(payment_amounts["service_fee_amount"])
     try:
         async with AsyncSessionLocal() as session:
             async with session.begin():
                 await session.execute(
                     insert(OrderPaymentData).values(
-                        order_id=order.id,
+                        order_id=order_id,
                         customer_email=customer_email,
-                        currency=payment_data.currency,
-                        order_amount=order_amount,
-                        service_fee_amount=service_fee_amount,
-                        paygine_payment_operation_id=payment_operation_id,
-                        expires_at=payment_data.expires_at,
+                        **payment_values,
                     )
                 )
     except SQLAlchemyError as exc:
         exc.payment_data = {
-            "order_id": order.id,
-            "currency": payment_data.currency,
-            "order_amount": str(order_amount),
-            "service_fee_amount": str(service_fee_amount),
-            "paygine_payment_operation_id": payment_operation_id,
-            "expires_at": payment_data.expires_at.isoformat(),
+            "order_id": order_id,
+            **{
+                key: value.isoformat()
+                if isinstance(value, datetime)
+                else str(value)
+                if isinstance(value, Decimal)
+                else value
+                for key, value in payment_values.items()
+            },
         }
         raise
 
