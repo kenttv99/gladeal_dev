@@ -8,14 +8,9 @@ from api.payments.utils.register_deal_methods import (
 )
 from api.payments.utils.refund_money_methods import refund_registered_deal
 from api.schemas.schemas_v1 import (
-    CancleUnpaymentDealRequest,
-    CompletePaymentedDealRequest,
-    GeneratePaymentLinkRequest,
-    GenerateWithdrowLinkRequest,
     RegisterDepositDealPaymentRequest,
     RegisterDepositDealPaymentResponse,
     RegisterPayoutDealPaymentRequest,
-    RefundMoneyRequest,
 )
 
 
@@ -33,35 +28,35 @@ async def register_payout_deal(
 
 
 async def cancle_unpayment_deal(
-    payment_data: CancleUnpaymentDealRequest,
+    paygine_payment_operation_id: int,
 ) -> dict[str, object]:
     """Переводим неоплаченную платежную сделку в статус EXPIRED."""
-    return await cancle_registered_deal(payment_data)
+    return await cancle_registered_deal(paygine_payment_operation_id)
 
 
 async def generate_payment_link(
-    payment_data: GeneratePaymentLinkRequest,
+    paygine_payment_operation_id: int,
 ) -> str:
     """Генерируем ссылку для оплаты + заморозки средств"""
-    return await create_payment_link(payment_data)
+    return await create_payment_link(paygine_payment_operation_id)
 
 
 async def generate_withdrow_link(
-    payment_data: GenerateWithdrowLinkRequest,
+    paygine_payout_operation_id: int,
 ) -> str:
     """Генерируем ссылку для получения средств исполнителем"""
-    return await create_withdrow_link(payment_data)
+    return await create_withdrow_link(paygine_payout_operation_id)
 
 
 async def complete_paymented_deal(
-    payment_data: CompletePaymentedDealRequest,
+    paygine_payment_operation_id: int,
 ) -> dict[str, object]:
     """Завершаем оплаченную сделку в ПЦ."""
-    return await complete_registered_deal(payment_data)
+    return await complete_registered_deal(paygine_payment_operation_id)
 
 
 async def refund_money(
-    payment_data: RefundMoneyRequest,
+    paygine_payment_operation_id: int,
 ) -> dict[str, object]:
     """Возвращаем средства заказчику после заморозки."""
-    return await refund_registered_deal(payment_data)
+    return await refund_registered_deal(paygine_payment_operation_id)

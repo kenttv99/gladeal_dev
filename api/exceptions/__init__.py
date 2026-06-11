@@ -16,6 +16,7 @@ from api.exceptions.exceptions import (
     ValidationError,
     PaymentInvalidProviderResponseError,
     PaymentInvalidProviderSignatureError,
+    OrderPaymentInvalidStatusError,
 )
 from api.exceptions.handler import register_exception_handlers
 
@@ -37,5 +38,6 @@ __all__ = [
     "ValidationError",
     "PaymentInvalidProviderResponseError",
     "PaymentInvalidProviderSignatureError",
+    "OrderPaymentInvalidStatusError",
     "register_exception_handlers",
 ]

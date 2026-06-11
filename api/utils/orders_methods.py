@@ -4,9 +4,10 @@ from decimal import Decimal
 from sqlalchemy import exists, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import OrderStates, UserRoles
+from api.enums.enums_v1 import OrderPaymentStates, OrderStates, UserRoles
 from api.exceptions import (
     MonthOrdersLimitExceededError,
+    OrderPaymentInvalidStatusError,
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderSelfExecutionForbiddenError,
@@ -187,26 +188,36 @@ async def get_order_link(order_id: int, client_id: int) -> str:
 
 async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
     async with AsyncSessionLocal() as session:
-        operation_id = await session.scalar(
-            select(OrderPaymentData.paygine_payment_operation_id)
+        result = await session.execute(
+            select(OrderPaymentData.paygine_payment_operation_id, OrderPaymentData.status)
             .join(Order, Order.id == OrderPaymentData.order_id)
             .where(Order.id == order_id, Order.client_id == client_id)
         )
-        if operation_id is None:
+        row = result.one_or_none()
+        if row is None or row[0] is None:
             raise OrderNotFoundError()
-        return int(operation_id)
+        _ensure_registered_order_payment_status(row[1])
+        return int(row[0])
 
 
 async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int:
     async with AsyncSessionLocal() as session:
-        operation_id = await session.scalar(
-            select(OrderPaymentData.paygine_payout_operation_id)
+        result = await session.execute(
+            select(OrderPaymentData.paygine_payout_operation_id, OrderPaymentData.status)
             .join(Order, Order.id == OrderPaymentData.order_id)
             .where(Order.id == order_id, Order.performer_id == performer_id)
         )
-        if operation_id is None:
+        row = result.one_or_none()
+        if row is None or row[0] is None:
             raise OrderNotFoundError()
-        return int(operation_id)
+        _ensure_registered_order_payment_status(row[1])
+        return int(row[0])
+
+
+def _ensure_registered_order_payment_status(status: OrderPaymentStates | str) -> None:
+    status_value = status.value if isinstance(status, OrderPaymentStates) else status
+    if status_value != OrderPaymentStates.REGISTERED.value:
+        raise OrderPaymentInvalidStatusError()
 
 
 async def get_order_by_slug(slug: str, authorized_user_id: int) -> Order:

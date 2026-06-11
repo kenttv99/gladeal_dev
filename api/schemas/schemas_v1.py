@@ -17,10 +17,6 @@ class RegisterUserRequest(BaseModel):
     ppd: bool = False
 
 
-class AuthUserRequest(BaseModel):
-    phone_number: str
-
-
 class AuthUserResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -31,14 +27,6 @@ class AuthUserResponse(BaseModel):
 class AccessTokenRefreshResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
-class ResetPhoneNumberRequest(BaseModel):
-    phone_number: str
 
 
 ###
@@ -53,10 +41,6 @@ class CreateOrderRequest(BaseModel):
     violation_proof_requirements: str
     price: Decimal
     expire_in: datetime
-
-
-class OrderInfoRequest(BaseModel):
-    slug: str
 
 
 class OrderInfoResponse(BaseModel):
@@ -149,26 +133,3 @@ class RegisterDepositDealPaymentResponse(BaseModel):
     provider_response: dict[str, object]
     payment_values: DepositDealPaymentValues
 
-
-###
-# Платежи: операции по зарегистрированным сделкам
-###
-
-class CancleUnpaymentDealRequest(BaseModel):
-    paygine_payment_operation_id: int
-
-
-class GeneratePaymentLinkRequest(BaseModel):
-    paygine_payment_operation_id: int
-
-
-class GenerateWithdrowLinkRequest(BaseModel):
-    paygine_payout_operation_id: int
-
-
-class CompletePaymentedDealRequest(BaseModel):
-    paygine_payment_operation_id: int
-
-
-class RefundMoneyRequest(BaseModel):
-    paygine_payment_operation_id: int

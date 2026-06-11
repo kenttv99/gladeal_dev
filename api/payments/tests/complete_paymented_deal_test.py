@@ -10,7 +10,6 @@ from api.payments.payments_methods import complete_paymented_deal
 from api.payments.utils.complete_paymented_deal_methods import (
     build_complete_paymented_deal_payload,
 )
-from api.schemas.schemas_v1 import CompletePaymentedDealRequest
 
 
 REAL_COMPLETE_PAYMENTED_DEAL_DATA = {
@@ -20,21 +19,21 @@ REAL_COMPLETE_PAYMENTED_DEAL_DATA = {
 
 class CompletePaymentedDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def test_complete_paymented_deal_payload_uses_payment_operation_id(self):
-        payment_data = CompletePaymentedDealRequest(**REAL_COMPLETE_PAYMENTED_DEAL_DATA)
-        payload = build_complete_paymented_deal_payload(payment_data)
+        operation_id = REAL_COMPLETE_PAYMENTED_DEAL_DATA["paygine_payment_operation_id"]
+        payload = build_complete_paymented_deal_payload(operation_id)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_payment_operation_id)
+            (PAYGINE_SECTOR, operation_id)
         )
 
-        self.assertEqual(payload["id"], payment_data.paygine_payment_operation_id)
+        self.assertEqual(payload["id"], operation_id)
         self.assertEqual(payload["signature"], expected_signature)
 
     async def test_complete_paymented_deal_returns_readable_paygine_response(self):
         """Переводим оплаченную сделку в ПЦ в COMPLETE."""
-        payment_data = CompletePaymentedDealRequest(**REAL_COMPLETE_PAYMENTED_DEAL_DATA)
+        operation_id = REAL_COMPLETE_PAYMENTED_DEAL_DATA["paygine_payment_operation_id"]
 
         try:
-            response = await complete_paymented_deal(payment_data)
+            response = await complete_paymented_deal(operation_id)
         except PaymentInvalidProviderResponseError as exc:
             self.fail(f"Paygine complete response parse error: {exc.details}")
 

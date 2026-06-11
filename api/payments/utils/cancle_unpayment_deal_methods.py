@@ -4,7 +4,6 @@ from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR
 from api.payments.http_client import get_paygine_client
 from api.payments.utils.xml_response_parser import parse_paygine_response
-from api.schemas.schemas_v1 import CancleUnpaymentDealRequest
 
 
 CHANGE_ORDER_STATUS_ENDPOINT = "/webapi/ChangeOrderStatus"
@@ -13,21 +12,21 @@ CHANGE_ORDER_STATUS_SIGNATURE_FIELDS = ("sector", "id", "order_state")
 
 
 async def cancle_registered_deal(
-    data: CancleUnpaymentDealRequest,
+    paygine_payment_operation_id: int,
 ) -> dict[str, object]:
     """Переводим неоплаченную сделку в статус EXPIRED в ПЦ."""
-    payload = build_cancle_unpayment_deal_payload(data)
+    payload = build_cancle_unpayment_deal_payload(paygine_payment_operation_id)
     raw_response = await post_cancle_unpayment_deal(payload)
     return parse_paygine_response(raw_response)
 
 
 def build_cancle_unpayment_deal_payload(
-    data: CancleUnpaymentDealRequest,
+    paygine_payment_operation_id: int,
 ) -> dict[str, object]:
     """Собираем form-urlencoded payload для webapi/ChangeOrderStatus."""
     payload = {
         "sector": PAYGINE_SECTOR,
-        "id": data.paygine_payment_operation_id,
+        "id": paygine_payment_operation_id,
         "order_state": EXPIRED_ORDER_STATE,
     }
     payload["signature"] = build_signature(

@@ -1,12 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 
 from api.schemas.schemas_v1 import (
     AccessTokenRefreshResponse,
-    AuthUserRequest,
     AuthUserResponse,
-    RefreshTokenRequest,
     RegisterUserRequest,
-    ResetPhoneNumberRequest,
 )
 from api.utils.jwt_methods import (
     authorize_user,
@@ -31,7 +28,7 @@ async def register(user: RegisterUserRequest):
     return await register_user(**user.dict())
 
 
-@router.post("/delete-account", dependencies=[Depends(authorize_user)])
+@router.post("/delete-account")
 async def delete_account(
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
@@ -40,8 +37,8 @@ async def delete_account(
 
 
 @router.post("/login")
-async def auth(user: AuthUserRequest) -> AuthUserResponse:
-    user_id = await authenticate_user(user.phone_number)
+async def auth(phone_number: str = Body(..., embed=True)) -> AuthUserResponse:
+    user_id = await authenticate_user(phone_number)
     refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
     return AuthUserResponse(
         access_token=generate_access_token(user_id),
@@ -51,22 +48,24 @@ async def auth(user: AuthUserRequest) -> AuthUserResponse:
 
 
 @router.post("/access_token_refresh/")
-async def access_token_refresh(token: RefreshTokenRequest) -> AccessTokenRefreshResponse:
+async def access_token_refresh(
+    refresh_token: str = Body(..., embed=True),
+) -> AccessTokenRefreshResponse:
     return AccessTokenRefreshResponse(
-        access_token=await refresh_access_token(token.refresh_token)
+        access_token=await refresh_access_token(refresh_token)
     )
 
 
 @router.post("/logout/")
-async def logout(token: RefreshTokenRequest) -> dict[str, bool]:
-    await revoke_refresh_token(token.refresh_token)
+async def logout(refresh_token: str = Body(..., embed=True)) -> dict[str, bool]:
+    await revoke_refresh_token(refresh_token)
     return {"success": True}
 
 
-@router.post("/reset-phone-number", dependencies=[Depends(authorize_user)])
+@router.post("/reset-phone-number")
 async def reset_phone_number(
-    user: ResetPhoneNumberRequest,
+    phone_number: str = Body(..., embed=True),
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    await reset_phone_number_method(authorized_user_id, user.phone_number)
+    await reset_phone_number_method(authorized_user_id, phone_number)
     return {"success": True}

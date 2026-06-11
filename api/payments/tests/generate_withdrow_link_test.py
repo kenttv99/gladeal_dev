@@ -10,7 +10,6 @@ from api.payments.payments_methods import generate_withdrow_link
 from api.payments.utils.generate_withdrow_link_methods import (
     GENERATE_WITHDROW_LINK_ENDPOINT,
 )
-from api.schemas.schemas_v1 import GenerateWithdrowLinkRequest
 
 
 REAL_GENERATE_WITHDROW_LINK_DATA = {
@@ -21,13 +20,13 @@ REAL_GENERATE_WITHDROW_LINK_DATA = {
 class GenerateWithdrowLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def test_generate_withdrow_link_returns_paygine_url(self):
         """Генерируем ссылку на выплату средств исполнителю."""
-        payment_data = GenerateWithdrowLinkRequest(**REAL_GENERATE_WITHDROW_LINK_DATA)
+        operation_id = REAL_GENERATE_WITHDROW_LINK_DATA["paygine_payout_operation_id"]
 
-        withdrow_link = await generate_withdrow_link(payment_data)
+        withdrow_link = await generate_withdrow_link(operation_id)
         parsed_url = urlparse(withdrow_link)
         parsed_query = parse_qs(parsed_url.query)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_payout_operation_id, SR_REF)
+            (PAYGINE_SECTOR, operation_id, SR_REF)
         )
 
         print(json.dumps({"withdrow_link": withdrow_link}, ensure_ascii=False, indent=2))
@@ -40,7 +39,7 @@ class GenerateWithdrowLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_query["sector"], [PAYGINE_SECTOR])
         self.assertEqual(
             parsed_query["id"],
-            [str(payment_data.paygine_payout_operation_id)],
+            [str(operation_id)],
         )
         self.assertEqual(parsed_query["sd_ref"], [SR_REF])
         self.assertEqual(parsed_query["signature"], [expected_signature])

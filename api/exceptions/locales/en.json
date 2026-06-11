@@ -17,5 +17,6 @@
   "PAYMENT_REGISTER_DEAL_FAILED": "Failed to register the payment deal.",
   "PAYMENT_INVALID_PROVIDER_RESPONSE": "The payment provider returned an invalid response.",
   "PAYMENT_INVALID_PROVIDER_SIGNATURE": "The payment provider response signature is invalid.",
-  "PAYMENT_DATA_SAVE_FAILED": "Failed to save payment data."
+  "PAYMENT_DATA_SAVE_FAILED": "Failed to save payment data.",
+  "ORDER_PAYMENT_INVALID_STATUS": "The order payment status is invalid for this operation."
 }

@@ -98,3 +98,8 @@ class PaymentInvalidProviderResponseError(BaseAPIException):
 class PaymentInvalidProviderSignatureError(BaseAPIException):
     status_code = 502
     error_code = "PAYMENT_INVALID_PROVIDER_SIGNATURE"
+
+
+class OrderPaymentInvalidStatusError(BaseAPIException):
+    status_code = 409
+    error_code = "ORDER_PAYMENT_INVALID_STATUS"

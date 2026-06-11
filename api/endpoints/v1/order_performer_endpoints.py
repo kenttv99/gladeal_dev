@@ -3,7 +3,6 @@ from fastapi import APIRouter, Depends
 from api.enums.enums_v1 import UserRoles
 from api.payments.payments_methods import generate_withdrow_link
 from api.schemas.schemas_v1 import (
-    GenerateWithdrowLinkRequest,
     OrderInfoResponse,
 )
 from api.utils.orders_methods import (
@@ -68,9 +67,7 @@ async def deal_payout_link(
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, str]:
     operation_id = await get_order_payout_operation_id(order_id, authorized_user_id)
-    link = await generate_withdrow_link(
-        GenerateWithdrowLinkRequest(paygine_payout_operation_id=operation_id)
-    )
+    link = await generate_withdrow_link(operation_id)
     return {"link": link}
 
 

@@ -8,7 +8,6 @@ from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR
 from api.payments.payments_methods import refund_money
 from api.payments.utils.refund_money_methods import build_refund_money_payload
-from api.schemas.schemas_v1 import RefundMoneyRequest
 
 
 REAL_REFUND_MONEY_DATA = {
@@ -18,21 +17,21 @@ REAL_REFUND_MONEY_DATA = {
 
 class RefundMoneyIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def test_refund_money_payload_uses_payment_operation_id(self):
-        payment_data = RefundMoneyRequest(**REAL_REFUND_MONEY_DATA)
-        payload = build_refund_money_payload(payment_data)
+        operation_id = REAL_REFUND_MONEY_DATA["paygine_payment_operation_id"]
+        payload = build_refund_money_payload(operation_id)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_payment_operation_id)
+            (PAYGINE_SECTOR, operation_id)
         )
 
-        self.assertEqual(payload["id"], payment_data.paygine_payment_operation_id)
+        self.assertEqual(payload["id"], operation_id)
         self.assertEqual(payload["signature"], expected_signature)
 
     async def test_refund_money_returns_readable_paygine_response(self):
         """Возвращаем средства заказчику в ПЦ через SDReverse."""
-        payment_data = RefundMoneyRequest(**REAL_REFUND_MONEY_DATA)
+        operation_id = REAL_REFUND_MONEY_DATA["paygine_payment_operation_id"]
 
         try:
-            response = await refund_money(payment_data)
+            response = await refund_money(operation_id)
         except PaymentInvalidProviderResponseError as exc:
             self.fail(f"Paygine refund response parse error: {exc.details}")
 

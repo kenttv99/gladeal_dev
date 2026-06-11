@@ -10,7 +10,6 @@ from api.payments.payments_methods import generate_payment_link
 from api.payments.utils.generate_payment_link_methods import (
     GENERATE_PAYMENT_LINK_ENDPOINT,
 )
-from api.schemas.schemas_v1 import GeneratePaymentLinkRequest
 
 
 REAL_GENERATE_PAYMENT_LINK_DATA = {
@@ -21,13 +20,13 @@ REAL_GENERATE_PAYMENT_LINK_DATA = {
 class GeneratePaymentLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def test_generate_payment_link_returns_paygine_url(self):
         """Генерируем ссылку на оплату зарегистрированной сделки в ПЦ."""
-        payment_data = GeneratePaymentLinkRequest(**REAL_GENERATE_PAYMENT_LINK_DATA)
+        operation_id = REAL_GENERATE_PAYMENT_LINK_DATA["paygine_payment_operation_id"]
 
-        payment_link = await generate_payment_link(payment_data)
+        payment_link = await generate_payment_link(operation_id)
         parsed_url = urlparse(payment_link)
         parsed_query = parse_qs(parsed_url.query)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_payment_operation_id, SR_REF)
+            (PAYGINE_SECTOR, operation_id, SR_REF)
         )
 
         print(json.dumps({"payment_link": payment_link}, ensure_ascii=False, indent=2))
@@ -40,7 +39,7 @@ class GeneratePaymentLinkIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_query["sector"], [PAYGINE_SECTOR])
         self.assertEqual(
             parsed_query["id"],
-            [str(payment_data.paygine_payment_operation_id)],
+            [str(operation_id)],
         )
         self.assertEqual(parsed_query["sd_ref"], [SR_REF])
         self.assertEqual(parsed_query["signature"], [expected_signature])

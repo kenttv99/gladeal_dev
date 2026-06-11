@@ -11,7 +11,6 @@ from api.payments.utils.cancle_unpayment_deal_methods import (
     EXPIRED_ORDER_STATE,
     build_cancle_unpayment_deal_payload,
 )
-from api.schemas.schemas_v1 import CancleUnpaymentDealRequest
 
 
 REAL_CANCLE_UNPAYMENT_DEAL_DATA = {
@@ -21,21 +20,21 @@ REAL_CANCLE_UNPAYMENT_DEAL_DATA = {
 
 class CancleUnpaymentDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
     async def test_cancle_unpayment_deal_payload_uses_payment_operation_id(self):
-        payment_data = CancleUnpaymentDealRequest(**REAL_CANCLE_UNPAYMENT_DEAL_DATA)
-        payload = build_cancle_unpayment_deal_payload(payment_data)
+        operation_id = REAL_CANCLE_UNPAYMENT_DEAL_DATA["paygine_payment_operation_id"]
+        payload = build_cancle_unpayment_deal_payload(operation_id)
         expected_signature = build_signature(
-            (PAYGINE_SECTOR, payment_data.paygine_payment_operation_id, EXPIRED_ORDER_STATE)
+            (PAYGINE_SECTOR, operation_id, EXPIRED_ORDER_STATE)
         )
 
-        self.assertEqual(payload["id"], payment_data.paygine_payment_operation_id)
+        self.assertEqual(payload["id"], operation_id)
         self.assertEqual(payload["signature"], expected_signature)
 
     async def test_cancle_unpayment_deal_returns_readable_paygine_response(self):
         """Переводим существующий заказ в ПЦ в EXPIRED."""
-        payment_data = CancleUnpaymentDealRequest(**REAL_CANCLE_UNPAYMENT_DEAL_DATA)
+        operation_id = REAL_CANCLE_UNPAYMENT_DEAL_DATA["paygine_payment_operation_id"]
 
         try:
-            response = await cancle_unpayment_deal(payment_data)
+            response = await cancle_unpayment_deal(operation_id)
         except PaymentInvalidProviderResponseError as exc:
             self.fail(f"Paygine cancle response parse error: {exc.details}")
 

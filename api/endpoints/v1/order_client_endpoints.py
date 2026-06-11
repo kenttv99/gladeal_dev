@@ -5,8 +5,6 @@ from api.payments.payments_methods import generate_payment_link
 from api.schemas.schemas_v1 import (
     CreateOrderRequest,
     CreateOrderResponse,
-    GeneratePaymentLinkRequest,
-    OrderInfoRequest,
     OrderInfoResponse,
 )
 from api.utils.orders_methods import (
@@ -36,10 +34,10 @@ async def order_link(
 
 @router.get("/order_info", response_model=OrderInfoResponse)
 async def order_info(
-    order: OrderInfoRequest = Depends(),
+    slug: str,
     authorized_user_id: int = Depends(authorize_user),
 ):
-    return await get_order_by_slug(order.slug, authorized_user_id)
+    return await get_order_by_slug(slug, authorized_user_id)
 
 @router.get("/deals", response_model=list[OrderInfoResponse])
 async def deals(authorized_user_id: int = Depends(authorize_user)):
@@ -100,7 +98,5 @@ async def deal_payment_link(
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, str]:
     operation_id = await get_order_payment_operation_id(order_id, authorized_user_id)
-    link = await generate_payment_link(
-        GeneratePaymentLinkRequest(paygine_payment_operation_id=operation_id)
-    )
+    link = await generate_payment_link(operation_id)
     return {"link": link}

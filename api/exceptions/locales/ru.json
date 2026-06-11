@@ -17,5 +17,6 @@
   "PAYMENT_REGISTER_DEAL_FAILED": "Не удалось зарегистрировать платежную сделку.",
   "PAYMENT_INVALID_PROVIDER_RESPONSE": "Платежный провайдер вернул некорректный ответ.",
   "PAYMENT_INVALID_PROVIDER_SIGNATURE": "Некорректная подпись ответа платежного провайдера.",
-  "PAYMENT_DATA_SAVE_FAILED": "Не удалось сохранить платежные данные."
+  "PAYMENT_DATA_SAVE_FAILED": "Не удалось сохранить платежные данные.",
+  "ORDER_PAYMENT_INVALID_STATUS": "Некорректный статус платежного заказа для этой операции."
 }
