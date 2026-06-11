@@ -64,17 +64,8 @@ class OrderPaymentData(Base):
         nullable=True,
     )
     paygine_refund_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    customer_payment_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    performer_payout_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    funds_frozen_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-    payout_link_created_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
+    
     payout_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
