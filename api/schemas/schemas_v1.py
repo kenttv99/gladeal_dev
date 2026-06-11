@@ -84,6 +84,10 @@ class OrderInfoResponse(BaseModel):
     completed_at: datetime | None
 
 
+class CreateOrderResponse(OrderInfoResponse):
+    service_fee_amount: Decimal
+
+
 class ApproveOrderRequest(BaseModel):
     order_id: int
     user_id: int

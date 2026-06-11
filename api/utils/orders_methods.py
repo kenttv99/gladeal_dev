@@ -14,7 +14,7 @@ from api.exceptions import (
     ValidationError,
 )
 from api.payments.payments_methods import register_deposit_deal
-from api.schemas.schemas_v1 import RegisterDepositDealPaymentRequest
+from api.schemas.schemas_v1 import CreateOrderResponse, OrderInfoResponse, RegisterDepositDealPaymentRequest
 from api.utils.help_orders_method import check_user_month_orders_limit
 from api.utils.help_orders_method import generate_order_link, generate_order_slug
 from database.config import AsyncSessionLocal
@@ -59,7 +59,7 @@ async def create_order(
     violation_proof_requirements: str,
     price: Decimal,
     expire_in: datetime,
-) -> Order:
+) -> CreateOrderResponse:
     
     """
     Метод создает ордер и проверяет месячный лимит для пользователя, установленный в .env, производит запрос к платежной системе, получает ответ и записывает данные в таблицы.
@@ -92,7 +92,10 @@ async def create_order(
         customer_email,
         payment_result.payment_values.model_dump(),
     )
-    return order
+    return CreateOrderResponse(
+        **OrderInfoResponse.model_validate(order).model_dump(),
+        service_fee_amount=payment_result.payment_values.service_fee_amount,
+    )
 
 
 async def _create_order_record(

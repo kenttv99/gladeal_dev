@@ -6,6 +6,7 @@ from api.schemas.schemas_v1 import (
     ClientHardDeclineOrderRequest,
     ClientSoftDeclineOrderRequest,
     CreateOrderRequest,
+    CreateOrderResponse,
     OrderInfoRequest,
     OrderInfoResponse,
     PaymentOrderRequest,
@@ -46,7 +47,7 @@ async def deals(authorized_user_id: int = Depends(authorize_user)):
     return await get_active_orders_by_role(UserRoles.CLIENT, authorized_user_id)
 
 
-@router.post("/deal_create")
+@router.post("/deal_create", response_model=CreateOrderResponse)
 async def deal_create(
     order: CreateOrderRequest,
     authorized_user_id: int = Depends(authorize_user),
