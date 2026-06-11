@@ -25,6 +25,7 @@ PAYGINE_ORDER_STATUS_NOTIFY_PATH = "/v1/paygine/webhook_order_status"
 async def create_deposit_deal(
     data: RegisterDepositDealPaymentRequest,
 ) -> RegisterDepositDealPaymentResponse:
+    """Собираем депозитную регистрацию, отправляем ее в ПЦ и готовим данные для БД."""
     payment_data = build_deposit_deal_payment_request(data)
     provider_response = await create_registered_deal(payment_data)
     return RegisterDepositDealPaymentResponse(
@@ -50,7 +51,7 @@ async def create_registered_payout_deal(
 def build_register_deal_payload(
     data: RegisterDealPaymentRequest,
 ) -> dict[str, object]:
-    """Собираем form-urlencoded payload для webapi/Register."""
+    """Собираем payload регистрации депозитной сделки для Paygine."""
     payment_amounts = calculate_payment_amounts(data.amount)
     payload = {
         "sector": PAYGINE_SECTOR,
@@ -73,7 +74,7 @@ def build_register_deal_payload(
 def build_register_payout_deal_payload(
     data: RegisterPayoutDealPaymentRequest,
 ) -> dict[str, object]:
-    """Собираем form-urlencoded payload для регистрации заказа вывода."""
+    """Собираем payload регистрации сделки вывода для Paygine."""
     payment_amounts = calculate_payment_amounts(data.amount)
     payload = {
         "sector": PAYGINE_SECTOR,
@@ -112,7 +113,7 @@ async def send_register_payout_deal_request(
 
 
 async def post_register_deal(payload: dict[str, object]) -> str:
-    """Выполняем асинхронный HTTP POST к webapi/Register."""
+    """Выполняем асинхронный POST к Paygine webapi/Register и возвращаем сырой ответ."""
     client = get_paygine_client()
     response = await client.post(
         REGISTER_DEAL_ENDPOINT,
@@ -126,6 +127,7 @@ async def post_register_deal(payload: dict[str, object]) -> str:
 def build_deposit_deal_payment_request(
     data: RegisterDepositDealPaymentRequest,
 ) -> RegisterDealPaymentRequest:
+    """Преобразуем backend-данные заказа в контракт регистрации депозитной сделки."""
     return RegisterDealPaymentRequest(
         order_id=data.order_id,
         customer=RegisterDealCustomer(
@@ -146,6 +148,7 @@ def build_deposit_order_payment_values(
     payment_data: RegisterDealPaymentRequest,
     payment_response: dict[str, object],
 ) -> DepositDealPaymentValues:
+    """Готовим значения для orders_payment_data на базе запроса и ответа ПЦ."""
     payment_amounts = calculate_payment_amounts(payment_data.amount)
     return DepositDealPaymentValues(
         currency=payment_data.currency,
@@ -157,6 +160,7 @@ def build_deposit_order_payment_values(
 
 
 def registered_deal_operation_id(response: dict[str, object]) -> str:
+    """Достаем id зарегистрированной операции из ответа ПЦ."""
     data = response.get("data")
     if not isinstance(data, dict) or not data.get("id"):
         raise PaymentInvalidProviderResponseError(details=response)
