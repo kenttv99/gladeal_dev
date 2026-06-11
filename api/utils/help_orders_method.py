@@ -52,6 +52,13 @@ class ClientConfirmPaymentData:
     paygine_payment_operation_id: int
 
 
+@dataclass(frozen=True)
+class OrderInfoPaymentData:
+    order: Order
+    customer_email: str | None
+    performer_email: str | None
+
+
 async def generate_order_slug(session: AsyncSession) -> str:
     while True:
         slug = token_urlsafe(16)
@@ -187,6 +194,31 @@ async def delete_order_record(
     )
     await session.execute(
         delete(Order).where(Order.id == order_id, Order.client_id == client_id)
+    )
+
+
+async def get_order_info_payment_data(
+    session: AsyncSession,
+    *conditions: object,
+) -> OrderInfoPaymentData:
+    result = await session.execute(
+        select(
+            Order,
+            OrderPaymentData.customer_email,
+            OrderPaymentData.performer_email,
+        )
+        .outerjoin(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .where(*conditions)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise OrderNotFoundError()
+
+    order, customer_email, performer_email = row
+    return OrderInfoPaymentData(
+        order=order,
+        customer_email=customer_email,
+        performer_email=performer_email,
     )
 
 

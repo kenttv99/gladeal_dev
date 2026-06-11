@@ -6,6 +6,7 @@ from api.schemas.schemas_v1 import (
     CreateOrderRequest,
     CreateOrderResponse,
     OrderInfoResponse,
+    OrderInfoWithPaymentDataResponse,
 )
 from api.utils.orders_methods import (
     client_confirm_order,
@@ -14,7 +15,8 @@ from api.utils.orders_methods import (
     create_order,
     get_active_orders_by_role,
     get_client_closed_orders,
-    get_order_by_slug,
+    get_order_info_by_id,
+    get_order_info_by_slug,
     get_order_link,
     get_order_payment_operation_id,
     # payment_order,
@@ -32,12 +34,20 @@ async def order_link(
 ) -> dict[str, str]:
     return {"link": await get_order_link(order_id, authorized_user_id)}
 
-@router.get("/order_info", response_model=OrderInfoResponse)
-async def order_info(
+@router.get("/order_info_by_slug", response_model=OrderInfoWithPaymentDataResponse)
+async def order_info_by_slug(
     slug: str,
     authorized_user_id: int = Depends(authorize_user),
 ):
-    return await get_order_by_slug(slug, authorized_user_id)
+    return await get_order_info_by_slug(slug)
+
+
+@router.get("/order_info", response_model=OrderInfoWithPaymentDataResponse)
+async def order_info(
+    order_id: int,
+    authorized_user_id: int = Depends(authorize_user),
+):
+    return await get_order_info_by_id(order_id)
 
 @router.get("/deals", response_model=list[OrderInfoResponse])
 async def deals(authorized_user_id: int = Depends(authorize_user)):

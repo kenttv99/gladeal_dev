@@ -21,6 +21,7 @@ from api.payments.payments_methods import (
 from api.schemas.schemas_v1 import (
     CreateOrderResponse,
     OrderInfoResponse,
+    OrderInfoWithPaymentDataResponse,
     RegisterDepositDealPaymentRequest,
     RegisterPayoutDealPaymentRequest,
 )
@@ -35,6 +36,7 @@ from api.utils.help_orders_method import (
     ensure_user_exists,
     generate_order_link,
     get_client_confirm_payment_data,
+    get_order_info_payment_data,
     get_softdecline_payment_operation_id,
     order_status_value,
     order_status_values,
@@ -158,15 +160,26 @@ async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int
         return int(row[0])
 
 
-async def get_order_by_slug(slug: str, authorized_user_id: int) -> Order:
-    """Достаем информацию об ордере по слагу"""
+async def get_order_info_by_slug(slug: str) -> OrderInfoWithPaymentDataResponse:
+    """Получаем детальную информацию о сделке по slug."""
     async with AsyncSessionLocal() as session:
-        order = await session.scalar(
-            select(Order).where(Order.slug == slug)
+        order_data = await get_order_info_payment_data(session, Order.slug == slug)
+        return OrderInfoWithPaymentDataResponse(
+            **OrderInfoResponse.model_validate(order_data.order).model_dump(),
+            customer_email=order_data.customer_email,
+            performer_email=order_data.performer_email,
         )
-        if order is None:
-            raise OrderNotFoundError()
-        return order
+
+
+async def get_order_info_by_id(order_id: int) -> OrderInfoWithPaymentDataResponse:
+    """Получаем детальную информацию о сделке по id."""
+    async with AsyncSessionLocal() as session:
+        order_data = await get_order_info_payment_data(session, Order.id == order_id)
+        return OrderInfoWithPaymentDataResponse(
+            **OrderInfoResponse.model_validate(order_data.order).model_dump(),
+            customer_email=order_data.customer_email,
+            performer_email=order_data.performer_email,
+        )
 
 
 async def get_active_orders_by_role(role: UserRoles | str, user_id: int) -> list[Order]:

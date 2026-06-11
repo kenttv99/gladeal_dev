@@ -62,6 +62,11 @@ class OrderInfoResponse(BaseModel):
     completed_at: datetime | None
 
 
+class OrderInfoWithPaymentDataResponse(OrderInfoResponse):
+    customer_email: str | None = None
+    performer_email: str | None = None
+
+
 class CreateOrderResponse(OrderInfoResponse):
     service_fee_amount: Decimal
 
