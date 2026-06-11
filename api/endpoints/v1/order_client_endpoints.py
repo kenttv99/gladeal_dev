@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 
 from api.enums.enums_v1 import UserRoles
 from api.payments.payments_methods import generate_payment_link
@@ -64,9 +64,10 @@ async def deal_create(
 @router.post("/deal_confirm")
 async def deal_confirm(
     order_id: int,
+    performer_email: str = Body(..., embed=True),
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:
-    await client_confirm_order(order_id, authorized_user_id)
+    await client_confirm_order(order_id, authorized_user_id, performer_email)
     return {"success": True}
 
 

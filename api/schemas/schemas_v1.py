@@ -95,7 +95,7 @@ class RegisterDealPaymentRequest(BaseModel):
     currency: int = 643
 
 
-class RegisterPayoutDealPaymentRequest(BaseModel):
+class RegisterPayoutDealProviderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     order_id: int
@@ -105,6 +105,19 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
     reference: str
     description: str
     notify_url: str
+    currency: int = 643
+
+
+class RegisterPayoutDealPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: int
+    performer_id: int
+    performer_email: str
+    performer_phone: str | None = None
+    amount: Decimal
+    expires_at: datetime
+    description: str
     currency: int = 643
 
 
@@ -133,3 +146,11 @@ class RegisterDepositDealPaymentResponse(BaseModel):
     provider_response: dict[str, object]
     payment_values: DepositDealPaymentValues
 
+
+class PayoutDealPaymentValues(BaseModel):
+    paygine_payout_operation_id: str
+
+
+class RegisterPayoutDealPaymentResponse(BaseModel):
+    provider_response: dict[str, object]
+    payment_values: PayoutDealPaymentValues

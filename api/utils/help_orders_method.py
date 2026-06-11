@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from secrets import token_urlsafe
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -13,6 +14,7 @@ from api.exceptions import (
     OrderNotFoundError,
     OrderPaymentInvalidStatusError,
     UserNotFoundError,
+    ValidationError,
 )
 from database.models.orders import Order, OrderStatusHistory
 from database.models.payments import OrderPaymentData
@@ -37,6 +39,17 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
 )
+
+
+@dataclass(frozen=True)
+class ClientConfirmPaymentData:
+    current_status: OrderStates | str | None
+    performer_id: int
+    performer_phone: str
+    price: Decimal
+    expire_in: datetime
+    title: str
+    paygine_payment_operation_id: int
 
 
 async def generate_order_slug(session: AsyncSession) -> str:
@@ -66,8 +79,15 @@ def order_status_values(status: str) -> dict[str, object]:
 
 
 def ensure_registered_order_payment_status(status: OrderPaymentStates | str) -> None:
+    ensure_order_payment_status(status, OrderPaymentStates.REGISTERED)
+
+
+def ensure_order_payment_status(
+    status: OrderPaymentStates | str,
+    expected_status: OrderPaymentStates,
+) -> None:
     status_value = status.value if isinstance(status, OrderPaymentStates) else status
-    if status_value != OrderPaymentStates.REGISTERED.value:
+    if status_value != expected_status.value:
         raise OrderPaymentInvalidStatusError()
 
 
@@ -167,6 +187,93 @@ async def delete_order_record(
     )
     await session.execute(
         delete(Order).where(Order.id == order_id, Order.client_id == client_id)
+    )
+
+
+async def get_client_confirm_payment_data(
+    session: AsyncSession,
+    order_id: int,
+    client_id: int,
+) -> ClientConfirmPaymentData:
+    await ensure_user_exists(session, client_id)
+    result = await session.execute(
+        select(
+            Order.status,
+            Order.performer_id,
+            Order.price,
+            Order.expire_in,
+            Order.title,
+            OrderPaymentData.paygine_payment_operation_id,
+            OrderPaymentData.status,
+            User.phone_number,
+        )
+        .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .join(User, User.id == Order.performer_id, isouter=True)
+        .where(Order.id == order_id, Order.client_id == client_id)
+        .with_for_update(of=(Order, OrderPaymentData))
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise OrderNotFoundError()
+
+    (
+        current_status,
+        performer_id,
+        price,
+        expire_in,
+        title,
+        payment_operation_id,
+        payment_status,
+        performer_phone,
+    ) = row
+    if order_status_value(current_status) != OrderStates.AWAITING_CLIENT_CONFIRMATION.value:
+        raise ValidationError()
+    if performer_id is None:
+        raise ValidationError()
+    if payment_operation_id is None:
+        raise OrderNotFoundError()
+    if performer_phone is None:
+        raise UserNotFoundError()
+    ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
+    return ClientConfirmPaymentData(
+        current_status=current_status,
+        performer_id=performer_id,
+        performer_phone=performer_phone,
+        price=price,
+        expire_in=expire_in,
+        title=title,
+        paygine_payment_operation_id=int(payment_operation_id),
+    )
+
+
+async def set_client_confirmed_order_status(
+    session: AsyncSession,
+    order_id: int,
+    current_status: OrderStates | str | None,
+    client_id: int,
+    performer_email: str,
+    payout_operation_id: str,
+) -> None:
+    await session.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(**order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value))
+    )
+    await add_order_status_history(
+        session,
+        order_id,
+        current_status,
+        OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+        client_id,
+    )
+    await session.execute(
+        update(OrderPaymentData)
+        .where(OrderPaymentData.order_id == order_id)
+        .values(
+            performer_email=performer_email,
+            paygine_payout_operation_id=payout_operation_id,
+            status=OrderPaymentStates.REGISTERED.value,
+        )
     )
 
 

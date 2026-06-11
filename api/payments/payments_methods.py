@@ -4,13 +4,14 @@ from api.payments.utils.generate_payment_link_methods import create_payment_link
 from api.payments.utils.generate_withdrow_link_methods import create_withdrow_link
 from api.payments.utils.register_deal_methods import (
     create_deposit_deal,
-    create_registered_payout_deal,
+    create_payout_deal,
 )
 from api.payments.utils.refund_money_methods import refund_registered_deal
 from api.schemas.schemas_v1 import (
     RegisterDepositDealPaymentRequest,
     RegisterDepositDealPaymentResponse,
     RegisterPayoutDealPaymentRequest,
+    RegisterPayoutDealPaymentResponse,
 )
 
 
@@ -22,9 +23,9 @@ async def register_deposit_deal(
 
 async def register_payout_deal(
     payment_data: RegisterPayoutDealPaymentRequest,
-) -> dict[str, object]:
+) -> RegisterPayoutDealPaymentResponse:
     """Регистрируем сделку в ПЦ для вывода и возвращаем ответ провайдера"""
-    return await create_registered_payout_deal(payment_data)
+    return await create_payout_deal(payment_data)
 
 
 async def cancle_unpayment_deal(

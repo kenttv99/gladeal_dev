@@ -83,6 +83,6 @@ def _webhook_order_id(payload: dict[str, object]) -> int:
     if not isinstance(reference, str) or not reference.startswith(ORDER_REFERENCE_PREFIX):
         raise PaymentInvalidProviderResponseError(details=payload)
     try:
-        return int(reference.removeprefix(ORDER_REFERENCE_PREFIX))
+        return int(reference.removeprefix(ORDER_REFERENCE_PREFIX).split("-", 1)[0])
     except ValueError as exc:
         raise PaymentInvalidProviderResponseError(details=payload) from exc

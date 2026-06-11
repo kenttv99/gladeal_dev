@@ -11,8 +11,18 @@ from api.exceptions import (
     OrderSelfExecutionForbiddenError,
     ValidationError,
 )
-from api.payments.payments_methods import cancle_unpayment_deal, register_deposit_deal
-from api.schemas.schemas_v1 import CreateOrderResponse, OrderInfoResponse, RegisterDepositDealPaymentRequest
+from api.payments.payments_methods import (
+    cancle_unpayment_deal,
+    complete_paymented_deal,
+    register_deposit_deal,
+    register_payout_deal,
+)
+from api.schemas.schemas_v1 import (
+    CreateOrderResponse,
+    OrderInfoResponse,
+    RegisterDepositDealPaymentRequest,
+    RegisterPayoutDealPaymentRequest,
+)
 from api.utils.help_orders_method import (
     ACTIVE_ORDER_STATUSES,
     CLOSED_ORDER_STATUSES,
@@ -23,9 +33,11 @@ from api.utils.help_orders_method import (
     ensure_registered_order_payment_status,
     ensure_user_exists,
     generate_order_link,
+    get_client_confirm_payment_data,
     get_softdecline_payment_operation_id,
     order_status_value,
     order_status_values,
+    set_client_confirmed_order_status,
     set_softdeclined_order_status,
 )
 from database.config import AsyncSessionLocal
@@ -248,31 +260,30 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             )
 
 
-async def client_confirm_order(order_id: int, client_id: int) -> None:
+async def client_confirm_order(order_id: int, client_id: int, performer_email: str) -> None:
     """Переводим сделку в состояние успешного завершения и ожидания получения выплаты исполнителем"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            await ensure_user_exists(session, client_id)
-
-            current_status = await session.scalar(
-                select(Order.status)
-                .where(Order.id == order_id, Order.client_id == client_id)
-                .with_for_update()
+            payment_data = await get_client_confirm_payment_data(session, order_id, client_id)
+            await complete_paymented_deal(payment_data.paygine_payment_operation_id)
+            payout_result = await register_payout_deal(
+                RegisterPayoutDealPaymentRequest(
+                    order_id=order_id,
+                    performer_id=payment_data.performer_id,
+                    performer_email=performer_email,
+                    performer_phone=payment_data.performer_phone,
+                    amount=payment_data.price,
+                    expires_at=payment_data.expire_in,
+                    description=payment_data.title,
+                )
             )
-            if current_status is None:
-                raise OrderNotFoundError()
-
-            await session.execute(
-                update(Order)
-                .where(Order.id == order_id)
-                .values(**order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value))
-            )
-            await add_order_status_history(
+            await set_client_confirmed_order_status(
                 session,
                 order_id,
-                current_status,
-                OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+                payment_data.current_status,
                 client_id,
+                performer_email,
+                payout_result.payment_values.paygine_payout_operation_id,
             )
 
 

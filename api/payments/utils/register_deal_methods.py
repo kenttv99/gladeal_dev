@@ -9,11 +9,15 @@ from api.payments.utils.commission_methods import calculate_payment_amounts, fro
 from api.payments.utils.xml_response_parser import parse_paygine_response
 from api.schemas.schemas_v1 import (
     DepositDealPaymentValues,
+    PayoutDealPaymentValues,
     RegisterDealCustomer,
+    RegisterDealPerformer,
     RegisterDealPaymentRequest,
     RegisterDepositDealPaymentRequest,
     RegisterDepositDealPaymentResponse,
+    RegisterPayoutDealPaymentResponse,
     RegisterPayoutDealPaymentRequest,
+    RegisterPayoutDealProviderRequest,
 )
 
 
@@ -42,10 +46,22 @@ async def create_registered_deal(
 
 
 async def create_registered_payout_deal(
-    data: RegisterPayoutDealPaymentRequest,
+    data: RegisterPayoutDealProviderRequest,
 ) -> dict[str, object]:
     """Регистрируем сделку вывода в ПЦ и возвращаем отформатированный ответ."""
     return await send_register_payout_deal_request(data)
+
+
+async def create_payout_deal(
+    data: RegisterPayoutDealPaymentRequest,
+) -> RegisterPayoutDealPaymentResponse:
+    """Собираем регистрацию вывода, отправляем ее в ПЦ и готовим данные для БД."""
+    payment_data = build_payout_deal_payment_request(data)
+    provider_response = await create_registered_payout_deal(payment_data)
+    return RegisterPayoutDealPaymentResponse(
+        provider_response=provider_response,
+        payment_values=build_payout_order_payment_values(provider_response),
+    )
 
 
 def build_register_deal_payload(
@@ -72,7 +88,7 @@ def build_register_deal_payload(
 
 
 def build_register_payout_deal_payload(
-    data: RegisterPayoutDealPaymentRequest,
+    data: RegisterPayoutDealProviderRequest,
 ) -> dict[str, object]:
     """Собираем payload регистрации сделки вывода для Paygine."""
     payment_amounts = calculate_payment_amounts(data.amount)
@@ -104,7 +120,7 @@ async def send_register_deal_request(
 
 
 async def send_register_payout_deal_request(
-    data: RegisterPayoutDealPaymentRequest,
+    data: RegisterPayoutDealProviderRequest,
 ) -> dict[str, object]:
     """Отправляем запрос регистрации заказа вывода в ПЦ Paygine."""
     payload = build_register_payout_deal_payload(data)
@@ -144,6 +160,26 @@ def build_deposit_deal_payment_request(
     )
 
 
+def build_payout_deal_payment_request(
+    data: RegisterPayoutDealPaymentRequest,
+) -> RegisterPayoutDealProviderRequest:
+    """Преобразуем backend-данные сделки в контракт регистрации вывода."""
+    return RegisterPayoutDealProviderRequest(
+        order_id=data.order_id,
+        performer=RegisterDealPerformer(
+            client_ref=str(data.performer_id),
+            email=data.performer_email,
+            phone=data.performer_phone,
+        ),
+        amount=data.amount,
+        expires_at=data.expires_at,
+        reference=f"gladeal-order-{data.order_id}-payout",
+        description=data.description,
+        notify_url=f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}",
+        currency=data.currency,
+    )
+
+
 def build_deposit_order_payment_values(
     payment_data: RegisterDealPaymentRequest,
     payment_response: dict[str, object],
@@ -156,6 +192,15 @@ def build_deposit_order_payment_values(
         service_fee_amount=from_kopecks(payment_amounts["service_fee_amount"]),
         paygine_payment_operation_id=registered_deal_operation_id(payment_response),
         expires_at=payment_data.expires_at,
+    )
+
+
+def build_payout_order_payment_values(
+    payment_response: dict[str, object],
+) -> PayoutDealPaymentValues:
+    """Готовим значения вывода для orders_payment_data на базе ответа ПЦ."""
+    return PayoutDealPaymentValues(
+        paygine_payout_operation_id=registered_deal_operation_id(payment_response),
     )
 
 
