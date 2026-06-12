@@ -31,7 +31,6 @@ REAL_REGISTER_DEAL_DATA = {
             "phone": "79000000001",
         },
         "amount": Decimal("10000.00"),
-        "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Оплата тестовой сделки",
         "notify_url": "https://gradually-civic-scorpion.cloudpub.ru/v1/paygine/webhook_order_status",
         "currency": 643,
@@ -49,7 +48,6 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 customer_email="customer@example.com",
                 customer_phone="+7 (900) 000-00-01",
                 amount=Decimal("10000.00"),
-                expires_at=datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
                 description="Оплата тестовой сделки",
             )
         )
@@ -112,7 +110,7 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(values.order_amount, Decimal("10000"))
         self.assertEqual(values.service_fee_amount, Decimal("850"))
         self.assertEqual(values.paygine_payment_operation_id, "13130177")
-        self.assertEqual(values.expires_at, payment_data.expires_at)
+        self.assertGreater(values.expire_payment_at, datetime.now(timezone.utc))
 
     async def test_register_deal_returns_readable_paygine_response(self):
         """Отправляем реальный запрос в ПЦ и получаем читаемый ответ."""
@@ -130,7 +128,6 @@ class RegisterDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     customer_email=payment_data.customer.email,
                     customer_phone=payment_data.customer.phone or "",
                     amount=payment_data.amount,
-                    expires_at=payment_data.expires_at,
                     description=payment_data.description,
                     currency=payment_data.currency,
                 )

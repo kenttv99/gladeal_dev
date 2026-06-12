@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from api.config import BASE_SITE_LINK
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
-from api.payments.config import PAYGINE_SECTOR, SR_REF
+from api.payments.config import (
+    EXPIRES_PAYMENT_TIME_MINUTES,
+    EXPIRES_PAYOUT_TIME_MINUTES,
+    PAYGINE_SECTOR,
+    SR_REF,
+)
 from api.payments.http_client import get_paygine_client
 from api.payments.utils.commission_methods import calculate_payment_amounts, from_kopecks
 from api.payments.utils.xml_response_parser import parse_paygine_response
@@ -152,7 +159,6 @@ def build_deposit_deal_payment_request(
             phone=data.customer_phone,
         ),
         amount=data.amount,
-        expires_at=data.expires_at,
         reference=f"gladeal-order-{data.order_id}",
         description=data.description,
         notify_url=f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}",
@@ -172,7 +178,6 @@ def build_payout_deal_payment_request(
             phone=data.performer_phone,
         ),
         amount=data.amount,
-        expires_at=data.expires_at,
         reference=f"gladeal-order-{data.order_id}-payout",
         description=data.description,
         notify_url=f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}",
@@ -191,7 +196,7 @@ def build_deposit_order_payment_values(
         order_amount=from_kopecks(payment_amounts["order_amount"]),
         service_fee_amount=from_kopecks(payment_amounts["service_fee_amount"]),
         paygine_payment_operation_id=registered_deal_operation_id(payment_response),
-        expires_at=payment_data.expires_at,
+        expire_payment_at=payment_expire_at(EXPIRES_PAYMENT_TIME_MINUTES),
     )
 
 
@@ -201,6 +206,7 @@ def build_payout_order_payment_values(
     """Готовим значения вывода для orders_payment_data на базе ответа ПЦ."""
     return PayoutDealPaymentValues(
         paygine_payout_operation_id=registered_deal_operation_id(payment_response),
+        expire_payout_at=payment_expire_at(EXPIRES_PAYOUT_TIME_MINUTES),
     )
 
 
@@ -210,3 +216,8 @@ def registered_deal_operation_id(response: dict[str, object]) -> str:
     if not isinstance(data, dict) or not data.get("id"):
         raise PaymentInvalidProviderResponseError(details=response)
     return str(data["id"])
+
+
+def payment_expire_at(minutes: int) -> datetime:
+    """Считаем срок жизни платежной операции от текущего UTC-времени."""
+    return datetime.now(timezone.utc) + timedelta(minutes=minutes)

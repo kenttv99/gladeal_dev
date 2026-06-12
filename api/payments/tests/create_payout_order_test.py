@@ -34,7 +34,6 @@ REAL_REGISTER_PAYOUT_DEAL_DATA = {
             "phone": "79000000002",
         },
         "amount": Decimal("10000.00"),
-        "expires_at": datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
         "description": "Вывод средств по тестовой сделке",
         "notify_url": "https://gradually-civic-scorpion.cloudpub.ru/v1/paygine/webhook_order_status",
         "currency": 643,
@@ -53,7 +52,6 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 performer_email="performer@example.com",
                 performer_phone="79000000002",
                 amount=Decimal("10000.00"),
-                expires_at=datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
                 description="Вывод средств по тестовой сделке",
             )
         )
@@ -71,6 +69,7 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(values.paygine_payout_operation_id, "13130132")
+        self.assertGreater(values.expire_payout_at, datetime.now(timezone.utc))
 
     async def test_register_payout_deal_payload_uses_performer_client_ref(self):
         """Собираем запрос регистрации вывода с client_ref исполнителя."""
@@ -101,13 +100,13 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
             performer_email="performer@example.com",
             performer_phone="79000000002",
             amount=Decimal("10000.00"),
-            expires_at=datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
             description="Вывод средств по тестовой сделке",
         )
         payment_response = RegisterPayoutDealPaymentResponse(
             provider_response={"root_tag": "response", "data": {"id": "payout-operation"}},
             payment_values=PayoutDealPaymentValues(
-                paygine_payout_operation_id="payout-operation"
+                paygine_payout_operation_id="payout-operation",
+                expire_payout_at=datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
             ),
         )
 
@@ -128,7 +127,6 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
             performer_email="performer@example.com",
             performer_phone="79000000002",
             amount=Decimal("10000.00"),
-            expires_at=datetime(2026, 6, 4, 12, 0, tzinfo=timezone.utc),
             description="Вывод средств по тестовой сделке",
         )
 

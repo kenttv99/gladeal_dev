@@ -93,7 +93,6 @@ class RegisterDealPaymentRequest(BaseModel):
     order_id: int
     customer: RegisterDealCustomer
     amount: Decimal
-    expires_at: datetime
     reference: str
     description: str
     notify_url: str
@@ -106,7 +105,6 @@ class RegisterPayoutDealProviderRequest(BaseModel):
     order_id: int
     performer: RegisterDealPerformer
     amount: Decimal
-    expires_at: datetime
     reference: str
     description: str
     notify_url: str
@@ -121,7 +119,6 @@ class RegisterPayoutDealPaymentRequest(BaseModel):
     performer_email: str
     performer_phone: str | None = None
     amount: Decimal
-    expires_at: datetime
     description: str
     currency: int = 643
 
@@ -134,7 +131,6 @@ class RegisterDepositDealPaymentRequest(BaseModel):
     customer_email: str
     customer_phone: str
     amount: Decimal
-    expires_at: datetime
     description: str
     currency: int = 643
 
@@ -144,7 +140,7 @@ class DepositDealPaymentValues(BaseModel):
     order_amount: Decimal
     service_fee_amount: Decimal
     paygine_payment_operation_id: str
-    expires_at: datetime
+    expire_payment_at: datetime
 
 
 class RegisterDepositDealPaymentResponse(BaseModel):
@@ -154,6 +150,7 @@ class RegisterDepositDealPaymentResponse(BaseModel):
 
 class PayoutDealPaymentValues(BaseModel):
     paygine_payout_operation_id: str
+    expire_payout_at: datetime
 
 
 class RegisterPayoutDealPaymentResponse(BaseModel):

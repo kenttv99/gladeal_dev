@@ -74,7 +74,14 @@ class OrderPaymentData(Base):
         nullable=True,
     )
     paygine_revoked_operation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expire_payment_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    expire_payout_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     payout_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

@@ -92,7 +92,6 @@ async def create_order(
                 customer_email=customer_email,
                 customer_phone=customer_phone,
                 amount=order.price,
-                expires_at=order.expire_in,
                 description=order.title,
             )
         )
@@ -308,7 +307,6 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
                     performer_email=payment_data.performer_email,
                     performer_phone=payment_data.performer_phone,
                     amount=payment_data.price,
-                    expires_at=payment_data.expire_in,
                     description=payment_data.title,
                 )
             )
@@ -318,6 +316,7 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
                 payment_data.current_status,
                 client_id,
                 payout_result.payment_values.paygine_payout_operation_id,
+                payout_result.payment_values.expire_payout_at,
             )
 
 

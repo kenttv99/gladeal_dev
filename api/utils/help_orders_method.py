@@ -48,7 +48,6 @@ class ClientConfirmPaymentData:
     performer_email: str
     performer_phone: str
     price: Decimal
-    expire_in: datetime
     title: str
     paygine_payment_operation_id: int
 
@@ -234,7 +233,6 @@ async def get_client_confirm_payment_data(
             Order.status,
             Order.performer_id,
             Order.price,
-            Order.expire_in,
             Order.title,
             OrderPaymentData.paygine_payment_operation_id,
             OrderPaymentData.payment_status,
@@ -254,7 +252,6 @@ async def get_client_confirm_payment_data(
         current_status,
         performer_id,
         price,
-        expire_in,
         title,
         payment_operation_id,
         payment_status,
@@ -278,7 +275,6 @@ async def get_client_confirm_payment_data(
         performer_email=performer_email,
         performer_phone=performer_phone,
         price=price,
-        expire_in=expire_in,
         title=title,
         paygine_payment_operation_id=int(payment_operation_id),
     )
@@ -290,6 +286,7 @@ async def set_client_confirmed_order_status(
     current_status: OrderStates | str | None,
     client_id: int,
     payout_operation_id: str,
+    expire_payout_at: datetime,
 ) -> None:
     await session.execute(
         update(Order)
@@ -311,6 +308,7 @@ async def set_client_confirmed_order_status(
             payment_complete_at=func.now(),
             paygine_payout_operation_id=payout_operation_id,
             payout_status=OrderPaymentStates.REGISTERED.value,
+            expire_payout_at=expire_payout_at,
         )
     )
 
