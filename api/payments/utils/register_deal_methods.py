@@ -8,6 +8,7 @@ from api.payments.auth_methods import build_signature
 from api.payments.config import (
     EXPIRES_PAYMENT_TIME_MINUTES,
     EXPIRES_PAYOUT_TIME_MINUTES,
+    PAYGINE_BASE_URL,
     PAYGINE_SECTOR,
     SR_REF,
 )
@@ -84,6 +85,7 @@ def build_register_deal_payload(
         "reference": data.reference,
         "description": data.description,
         "notify_url": data.notify_url,
+        **build_paygine_redirect_urls(),
         "payer_id": data.customer.client_ref,
         "email": data.customer.email,
         "phone": data.customer.phone,
@@ -107,6 +109,7 @@ def build_register_payout_deal_payload(
         "reference": data.reference,
         "description": data.description,
         "notify_url": data.notify_url,
+        **build_paygine_redirect_urls(),
         "client_ref": data.performer.client_ref,
         "email": data.performer.email,
         "phone": data.performer.phone,
@@ -115,6 +118,14 @@ def build_register_payout_deal_payload(
         payload[field] for field in REGISTER_DEAL_SIGNATURE_FIELDS
     )
     return {key: value for key, value in payload.items() if value is not None}
+
+
+def build_paygine_redirect_urls() -> dict[str, str]:
+    base_url = PAYGINE_BASE_URL.rstrip("/")
+    return {
+        "url": f"{base_url}/payment/success",
+        "failurl": f"{base_url}/payment/fail",
+    }
 
 
 async def send_register_deal_request(

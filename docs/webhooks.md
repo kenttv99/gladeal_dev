@@ -1,6 +1,6 @@
 # Webhooks Paygine
 
-Webhook-обработчики Paygine вынесены в отдельное FastAPI-приложение `api/servers/payments.py`. Этот сервис принимает callback-и о состоянии платежей и redirect-запросы после перехода пользователя на страницу Paygine.
+Webhook-обработчики Paygine вынесены в отдельное FastAPI-приложение `api/servers/payments.py`. Этот сервис принимает callback-и о состоянии платежей.
 
 ## Стек
 
@@ -13,7 +13,6 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 
 - `api/servers/payments.py` - отдельное приложение для webhook-ов Paygine.
 - `api/webhooks/v1/order_status_webhook.py` - обработка статусов платежных операций.
-- `api/webhooks/v1/redirect_after_payments_webhook.py` - redirect-эндпоинты успеха и ошибки.
 - `api/utils/order_status_webhook_methods.py` - бизнес-логика обновления заказа по callback-у.
 - `api/payments/utils/xml_response_parser.py` - разбор XML тела запроса.
 - `database/models/orders.py` - статус сделки и история статусов.
@@ -82,10 +81,6 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 ```
 
 Фактическое значение `order_state` зависит от payload Paygine.
-
-## Redirect-эндпоинты
-
-`GET /v1/paygine/redirect/success` и `GET /v1/paygine/redirect/failure` сейчас не выполняют дополнительную бизнес-обработку и просто завершают запрос.
 
 ## Связь с платежным контуром
 

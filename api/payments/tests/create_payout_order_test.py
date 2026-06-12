@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from api.exceptions import PaymentInvalidProviderResponseError
 from api.payments.auth_methods import build_signature
-from api.payments.config import PAYGINE_SECTOR, SR_REF
+from api.payments.config import PAYGINE_BASE_URL, PAYGINE_SECTOR, SR_REF
 from api.payments.payments_methods import register_payout_deal
 from api.payments.utils.commission_methods import calculate_payment_amounts
 from api.payments.utils.register_deal_methods import (
@@ -90,6 +90,8 @@ class RegisterPayoutDealIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["client_ref"], payment_data.performer.client_ref)
         self.assertEqual(payload["sd_ref"], SR_REF)
         self.assertEqual(payload["notify_url"], payment_data.notify_url)
+        self.assertEqual(payload["url"], f"{PAYGINE_BASE_URL.rstrip('/')}/payment/success")
+        self.assertEqual(payload["failurl"], f"{PAYGINE_BASE_URL.rstrip('/')}/payment/fail")
         self.assertEqual(payload["signature"], expected_signature)
 
     async def test_register_payout_deal_uses_payout_provider_request(self):
