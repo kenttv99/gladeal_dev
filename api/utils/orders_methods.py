@@ -111,6 +111,8 @@ async def create_order(
             )
     return CreateOrderResponse(
         **OrderInfoResponse.model_validate(order).model_dump(),
+        customer_email=customer_email,
+        performer_email=None,
         service_fee_amount=payment_result.payment_values.service_fee_amount,
     )
 

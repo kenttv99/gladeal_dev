@@ -67,7 +67,7 @@ class OrderInfoWithPaymentDataResponse(OrderInfoResponse):
     performer_email: str | None = None
 
 
-class CreateOrderResponse(OrderInfoResponse):
+class CreateOrderResponse(OrderInfoWithPaymentDataResponse):
     service_fee_amount: Decimal
 
 
