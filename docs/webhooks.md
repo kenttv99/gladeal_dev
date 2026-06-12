@@ -1,0 +1,93 @@
+# Webhooks Paygine
+
+Webhook-обработчики Paygine вынесены в отдельное FastAPI-приложение `api/servers/payments.py`. Этот сервис принимает callback-и о состоянии платежей и redirect-запросы после перехода пользователя на страницу Paygine.
+
+## Стек
+
+- FastAPI - HTTP endpoint-ы webhook-ов и redirect-ов.
+- SQLAlchemy async - атомарное обновление `orders` и `orders_payment_data`.
+- XML parser - разбор payload Paygine.
+- PostgreSQL row locks - защита от повторной обработки одной операции несколькими процессами.
+
+## Структура
+
+- `api/servers/payments.py` - отдельное приложение для webhook-ов Paygine.
+- `api/webhooks/v1/order_status_webhook.py` - обработка статусов платежных операций.
+- `api/webhooks/v1/redirect_after_payments_webhook.py` - redirect-эндпоинты успеха и ошибки.
+- `api/utils/order_status_webhook_methods.py` - бизнес-логика обновления заказа по callback-у.
+- `api/payments/utils/xml_response_parser.py` - разбор XML тела запроса.
+- `database/models/orders.py` - статус сделки и история статусов.
+- `database/models/payments.py` - платежные статусы и ids Paygine-операций.
+- `api/enums/enums_v1.py` - статусы заказов и платежей.
+
+## Эндпоинты
+
+Сервис поднимается отдельно от основного API и использует порт `8001`.
+
+- `POST /v1/paygine/webhook_order_status` - callback Paygine по статусу операции.
+- `GET /v1/paygine/redirect/success` - redirect после успешного перехода пользователя.
+- `GET /v1/paygine/redirect/failure` - redirect после неудачного перехода пользователя.
+
+## Callback по статусу операции
+
+`webhook_order_status`:
+
+- читает raw XML body из `Request`;
+- логирует полученный payload;
+- парсит payload в dict;
+- нормализует `data.order_state` в `OrderPaymentStates`;
+- определяет тип операции по `data.reference` и `data.order_id`;
+- обновляет `orders` и `orders_payment_data` в одной транзакции.
+
+Формат `reference`, который использует код:
+
+- `gladeal-order-{order_id}` - депозитная операция;
+- `gladeal-order-{order_id}-payout` - payout-операция.
+
+Тип операции определяется по совпадению `data.order_id` с сохраненными:
+
+- `paygine_payment_operation_id`;
+- `paygine_payout_operation_id`.
+
+Если payload не соответствует ожидаемой структуре, выбрасывается `PaymentInvalidProviderResponseError`.
+
+## Обработка payment callback
+
+Для депозитной операции:
+
+- `AUTHORIZED` - `orders_payment_data.payment_status = authorized`, `payment_complete_at = now()`, `orders.status = awaiting_performer_confirmation`, запись добавляется в `order_status_history`.
+- `COMPLETED` - `orders_payment_data.payment_status = completed`.
+
+Для payout-операции:
+
+- `COMPLETED` - `orders.status = successful_completion`, `orders_payment_data.payout_status = completed`, `payout_completed_at = now()`.
+
+В этом пути запись в `order_status_history` сейчас не добавляется.
+
+Другие допустимые значения `OrderPaymentStates` сейчас проходят через парсер и возвращаются в ответе, но отдельной бизнес-логики для них нет.
+
+## Ответ webhook
+
+Успешный ответ `POST /v1/paygine/webhook_order_status`:
+
+```json
+{
+  "status": "accepted",
+  "order_state": "authorized"
+}
+```
+
+Фактическое значение `order_state` зависит от payload Paygine.
+
+## Redirect-эндпоинты
+
+`GET /v1/paygine/redirect/success` и `GET /v1/paygine/redirect/failure` сейчас не выполняют дополнительную бизнес-обработку и просто завершают запрос.
+
+## Связь с платежным контуром
+
+Webhook-слой работает вместе с методами из [payments.md](payments.md):
+
+- регистрация депозитной сделки на этапе создания заказа;
+- регистрация payout-операции после подтверждения клиентом;
+- возврат средств при отказе исполнителя или при soft decline;
+- завершение payout-операции после выплаты исполнителю.
