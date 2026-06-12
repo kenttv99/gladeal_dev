@@ -13,6 +13,7 @@ from api.exceptions import (
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderPaymentInvalidStatusError,
+    OrderSelfExecutionForbiddenError,
     UserNotFoundError,
     ValidationError,
 )
@@ -38,6 +39,10 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
     OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
+)
+PERFORMER_DECLINE_ORDER_STATUSES = (
+    OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+    OrderStates.AWAITING_CONFLICT.value,
 )
 
 
@@ -309,6 +314,66 @@ async def set_client_confirmed_order_status(
             paygine_payout_operation_id=payout_operation_id,
             payout_status=OrderPaymentStates.REGISTERED.value,
             expire_payout_at=expire_payout_at,
+        )
+    )
+
+
+async def get_performer_decline_payment_operation_id(
+    session: AsyncSession,
+    order_id: int,
+    performer_id: int,
+) -> tuple[int, OrderStates | str | None]:
+    await ensure_user_exists(session, performer_id)
+    result = await session.execute(
+        select(
+            Order.status,
+            Order.client_id,
+            OrderPaymentData.paygine_payment_operation_id,
+            OrderPaymentData.payment_status,
+        )
+        .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .where(Order.id == order_id, Order.performer_id == performer_id)
+        .with_for_update(of=(Order, OrderPaymentData))
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise OrderNotFoundError()
+
+    current_status, client_id, payment_operation_id, payment_status = row
+    if client_id == performer_id:
+        raise OrderSelfExecutionForbiddenError()
+    if order_status_value(current_status) not in PERFORMER_DECLINE_ORDER_STATUSES:
+        raise ValidationError()
+    if payment_operation_id is None:
+        raise OrderNotFoundError()
+    ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
+    return int(payment_operation_id), current_status
+
+
+async def set_performer_declined_order_status(
+    session: AsyncSession,
+    order_id: int,
+    current_status: OrderStates | str | None,
+    performer_id: int,
+) -> None:
+    await session.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(**order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
+    )
+    await add_order_status_history(
+        session,
+        order_id,
+        current_status,
+        OrderStates.UNSUCCESSFUL_COMPLETION.value,
+        performer_id,
+    )
+    await session.execute(
+        update(OrderPaymentData)
+        .where(OrderPaymentData.order_id == order_id)
+        .values(
+            payment_status=OrderPaymentStates.BLOCKED.value,
+            updated_at=func.now(),
         )
     )
 

@@ -15,6 +15,7 @@ from api.exceptions import (
 from api.payments.payments_methods import (
     cancle_unpayment_deal,
     complete_paymented_deal,
+    refund_money,
     register_deposit_deal,
     register_payout_deal,
 )
@@ -37,10 +38,12 @@ from api.utils.help_orders_method import (
     generate_order_link,
     get_client_confirm_payment_data,
     get_order_info_payment_data,
+    get_performer_decline_payment_operation_id,
     get_softdecline_payment_operation_id,
     order_status_value,
     order_status_values,
     set_client_confirmed_order_status,
+    set_performer_declined_order_status,
     set_softdeclined_order_status,
 )
 from database.config import AsyncSessionLocal
@@ -361,30 +364,16 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние неуспешного завершения по отказу исполнителя"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            await ensure_user_exists(session, performer_id)
-
-            order_data = await session.execute(
-                select(Order.status, Order.client_id)
-                .where(Order.id == order_id, Order.performer_id == performer_id)
-                .with_for_update()
+            payment_operation_id, current_status = await get_performer_decline_payment_operation_id(
+                session,
+                order_id,
+                performer_id,
             )
-            order_row = order_data.one_or_none()
-            if order_row is None:
-                raise OrderNotFoundError()
-            current_status, client_id = order_row
-            if client_id == performer_id:
-                raise OrderSelfExecutionForbiddenError()
-
-            await session.execute(
-                update(Order)
-                .where(Order.id == order_id)
-                .values(**order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
-            )
-            await add_order_status_history(
+            await refund_money(payment_operation_id)
+            await set_performer_declined_order_status(
                 session,
                 order_id,
                 current_status,
-                OrderStates.UNSUCCESSFUL_COMPLETION.value,
                 performer_id,
             )
 
