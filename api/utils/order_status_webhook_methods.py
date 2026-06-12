@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, PaymentInvalidProviderResponseError
 from api.payments.utils.xml_response_parser import parse_paygine_response
-from api.utils.help_orders_method import add_order_status_history, order_status_values
+from api.utils.help_orders_method import (
+    add_order_status_history,
+    order_status_value,
+    order_status_values,
+)
 from database.config import AsyncSessionLocal
 from database.models.orders import Order
 from database.models.payments import OrderPaymentData
@@ -145,7 +149,7 @@ async def set_webhook_payment_authorized(
     session: AsyncSession,
     operation: WebhookOrderOperation,
 ) -> None:
-    if _enum_value(operation.payment_status) != OrderPaymentStates.COMPLETED.value:
+    if payment_status_value(operation.payment_status) != OrderPaymentStates.COMPLETED.value:
         await session.execute(
             update(OrderPaymentData)
             .where(OrderPaymentData.id == operation.payment_data_id)
@@ -156,7 +160,7 @@ async def set_webhook_payment_authorized(
             )
         )
 
-    current_status_value = _enum_value(operation.order_status)
+    current_status_value = order_status_value(operation.order_status)
     if current_status_value != OrderStates.AWAITING_PAYMENT.value:
         return
 
@@ -178,10 +182,10 @@ async def set_webhook_payout_completed(
     session: AsyncSession,
     operation: WebhookOrderOperation,
 ) -> None:
-    current_status = _enum_value(operation.order_status)
+    current_status = order_status_value(operation.order_status)
     new_status = get_webhook_payout_completed_order_status(current_status)
     is_new_payout_completion = (
-        _enum_value(operation.payout_status) != OrderPaymentStates.COMPLETED.value
+        payment_status_value(operation.payout_status) != OrderPaymentStates.COMPLETED.value
     )
 
     if current_status != new_status:
@@ -210,8 +214,10 @@ async def set_webhook_payout_completed(
     )
 
 
-def get_webhook_payout_completed_order_status(current_status: object) -> str:
-    status = _enum_value(current_status)
+def get_webhook_payout_completed_order_status(
+    current_status: OrderStates | str | None,
+) -> str:
+    status = order_status_value(current_status)
     if status in {
         OrderStates.CANCLED_BY_EXPIRE_TIME.value,
         OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
@@ -244,5 +250,5 @@ def _webhook_paygine_order_id(payload: dict[str, object]) -> str:
     return str(order_id)
 
 
-def _enum_value(value: object) -> object:
-    return value.value if hasattr(value, "value") else value
+def payment_status_value(status: OrderPaymentStates | str | None) -> str | None:
+    return status.value if isinstance(status, OrderPaymentStates) else status
