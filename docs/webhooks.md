@@ -60,9 +60,13 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 
 Для payout-операции:
 
-- `COMPLETED` - `orders.status = successful_completion`, `orders_payment_data.payout_status = completed`, `payout_completed_at = now()`.
+- `COMPLETED` - `orders_payment_data.payout_status = completed`, `payout_completed_at = now()`, запись добавляется в `order_status_history`.
 
-В этом пути запись в `order_status_history` сейчас не добавляется.
+Статус сделки при `COMPLETED` payout выбирается по текущему бизнес-исходу:
+
+- обычная выплата исполнителю из `awaiting_performer_payout` переводит сделку в `successful_completion`;
+- выплата по просрочке сохраняет `confirm_by_expire_time_to_performer`;
+- возврат по просрочке сохраняет `cancled_by_expire_time_to_client`.
 
 Другие допустимые значения `OrderPaymentStates` сейчас проходят через парсер и возвращаются в ответе, но отдельной бизнес-логики для них нет.
 

@@ -4,15 +4,15 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import Request
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, PaymentInvalidProviderResponseError
 from api.payments.utils.xml_response_parser import parse_paygine_response
-from api.utils.help_orders_method import order_status_values
+from api.utils.help_orders_method import add_order_status_history, order_status_values
 from database.config import AsyncSessionLocal
-from database.models.orders import Order, OrderStatusHistory
+from database.models.orders import Order
 from database.models.payments import OrderPaymentData
 
 
@@ -26,6 +26,7 @@ class WebhookOrderOperation:
     payment_data_id: int
     order_status: OrderStates | str | None
     payment_status: OrderPaymentStates | str | None
+    payout_status: OrderPaymentStates | str | None
     operation_type: WebhookOperationType
 
 
@@ -77,6 +78,7 @@ async def get_webhook_order_operation(
             Order.status,
             OrderPaymentData.id,
             OrderPaymentData.payment_status,
+            OrderPaymentData.payout_status,
             OrderPaymentData.paygine_payment_operation_id,
             OrderPaymentData.paygine_payout_operation_id,
         )
@@ -92,6 +94,7 @@ async def get_webhook_order_operation(
         order_status,
         payment_data_id,
         payment_status,
+        payout_status,
         payment_operation_id,
         payout_operation_id,
     ) = row
@@ -100,6 +103,7 @@ async def get_webhook_order_operation(
         payment_data_id=payment_data_id,
         order_status=order_status,
         payment_status=payment_status,
+        payout_status=payout_status,
         operation_type=get_webhook_order_operation_type(
             payment_operation_id,
             payout_operation_id,
@@ -161,13 +165,12 @@ async def set_webhook_payment_authorized(
         .where(Order.id == operation.order_id)
         .values(status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value)
     )
-    await session.execute(
-        insert(OrderStatusHistory).values(
-            order_id=operation.order_id,
-            old_status=current_status_value,
-            new_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-            changed_by_user_id=None,
-        )
+    await add_order_status_history(
+        session,
+        operation.order_id,
+        current_status_value,
+        OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+        None,
     )
 
 
@@ -175,11 +178,27 @@ async def set_webhook_payout_completed(
     session: AsyncSession,
     operation: WebhookOrderOperation,
 ) -> None:
-    await session.execute(
-        update(Order)
-        .where(Order.id == operation.order_id)
-        .values(**order_status_values(OrderStates.SUCCESSFUL_COMPLETION.value))
+    current_status = _enum_value(operation.order_status)
+    new_status = get_webhook_payout_completed_order_status(current_status)
+    is_new_payout_completion = (
+        _enum_value(operation.payout_status) != OrderPaymentStates.COMPLETED.value
     )
+
+    if current_status != new_status:
+        await session.execute(
+            update(Order)
+            .where(Order.id == operation.order_id)
+            .values(**order_status_values(new_status))
+        )
+    if is_new_payout_completion:
+        await add_order_status_history(
+            session,
+            operation.order_id,
+            current_status,
+            new_status,
+            None,
+        )
+
     await session.execute(
         update(OrderPaymentData)
         .where(OrderPaymentData.id == operation.payment_data_id)
@@ -189,6 +208,16 @@ async def set_webhook_payout_completed(
             updated_at=func.now(),
         )
     )
+
+
+def get_webhook_payout_completed_order_status(current_status: object) -> str:
+    status = _enum_value(current_status)
+    if status in {
+        OrderStates.CANCLED_BY_EXPIRE_TIME.value,
+        OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
+    }:
+        return status
+    return OrderStates.SUCCESSFUL_COMPLETION.value
 
 
 def _webhook_data(payload: dict[str, object]) -> dict[str, object]:

@@ -149,7 +149,7 @@ Refresh token-ы пользователей.
 
 - `order_id -> orders.id`.
 - `changed_by_user_id -> users.id`.
-- таблица хранит основные переходы статусов, которые выполняются через API, воркер и payment webhook; payout-completed callback пишет только `orders` и `orders_payment_data`.
+- таблица хранит основные переходы статусов, которые выполняются через API, воркер и payment webhook, включая payout-completed callback.
 
 ### `notifications`
 

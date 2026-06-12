@@ -287,7 +287,7 @@ Endpoint удаляет запись refresh token из `user_refresh_tokens` и
 
 Enum-значения сохраняются в БД через `.value`, в нижнем регистре.
 
-Отдельные платежные обновления, которые не меняют `orders.status`, в историю не попадают. Для payout-completed callback `order_status_history` сейчас тоже не заполняется.
+Отдельные платежные обновления, которые не меняют `orders.status`, в историю не попадают. Payout-completed callback пишет строку в `order_status_history` и не перезаписывает expire-исходы на `successful_completion`.
 
 ## Ответы
 
