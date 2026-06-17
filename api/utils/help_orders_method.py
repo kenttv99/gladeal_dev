@@ -41,7 +41,7 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
 )
 PERFORMER_DECLINE_ORDER_STATUSES = (
-    OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+    OrderStates.AWAITING_PAYMENT.value,
     OrderStates.AWAITING_CONFLICT.value,
 )
 
@@ -78,6 +78,17 @@ def generate_order_link(slug: str) -> str:
 
 def order_status_value(status: OrderStates | str | None) -> str | None:
     return status.value if isinstance(status, OrderStates) else status
+
+
+def ensure_order_status(
+    current_status: OrderStates | str | None,
+    allowed_statuses: OrderStates | str | tuple[OrderStates | str, ...],
+) -> None:
+    status_value = order_status_value(current_status)
+    if not isinstance(allowed_statuses, tuple):
+        allowed_statuses = (allowed_statuses,)
+    if status_value not in {order_status_value(status) for status in allowed_statuses}:
+        raise ValidationError()
 
 
 def order_status_values(status: str) -> dict[str, object]:
@@ -263,8 +274,7 @@ async def get_client_confirm_payment_data(
         performer_email,
         performer_phone,
     ) = row
-    if order_status_value(current_status) != OrderStates.AWAITING_CLIENT_CONFIRMATION.value:
-        raise ValidationError()
+    ensure_order_status(current_status, OrderStates.AWAITING_CLIENT_CONFIRMATION)
     if performer_id is None:
         raise ValidationError()
     if payment_operation_id is None:
@@ -342,11 +352,13 @@ async def get_performer_decline_payment_operation_id(
     current_status, client_id, payment_operation_id, payment_status = row
     if client_id == performer_id:
         raise OrderSelfExecutionForbiddenError()
-    if order_status_value(current_status) not in PERFORMER_DECLINE_ORDER_STATUSES:
-        raise ValidationError()
+    ensure_order_status(current_status, PERFORMER_DECLINE_ORDER_STATUSES)
     if payment_operation_id is None:
         raise OrderNotFoundError()
-    ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
+    if order_status_value(current_status) == OrderStates.AWAITING_PAYMENT.value:
+        ensure_registered_order_payment_status(payment_status)
+    else:
+        ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
     return int(payment_operation_id), current_status
 
 
@@ -372,7 +384,7 @@ async def set_performer_declined_order_status(
         update(OrderPaymentData)
         .where(OrderPaymentData.order_id == order_id)
         .values(
-            payment_status=OrderPaymentStates.BLOCKED.value,
+            payment_status=OrderPaymentStates.CANCELED.value,
             updated_at=func.now(),
         )
     )
@@ -400,7 +412,17 @@ async def get_softdecline_payment_operation_id(
         raise OrderNotFoundError()
 
     current_status, performer_id, payment_operation_id, payment_status = row
-    if performer_id is not None:
+    ensure_order_status(
+        current_status,
+        (
+            OrderStates.AWAITING_PERFORMER,
+            OrderStates.AWAITING_PAYMENT,
+        ),
+    )
+    if (
+        order_status_value(current_status) == OrderStates.AWAITING_PERFORMER.value
+        and performer_id is not None
+    ):
         raise OrderAlreadyAcceptedError()
     if payment_operation_id is None:
         raise OrderNotFoundError()

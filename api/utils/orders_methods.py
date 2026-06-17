@@ -33,6 +33,7 @@ from api.utils.help_orders_method import (
     create_order_payment_data,
     create_order_record,
     delete_order_record,
+    ensure_order_status,
     ensure_registered_order_payment_status,
     ensure_user_exists,
     generate_order_link,
@@ -284,6 +285,7 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             current_status, client_id = order_row
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
+            ensure_order_status(current_status, OrderStates.AWAITING_PERFORMER_CONFIRMATION)
 
             await session.execute(
                 update(Order)
@@ -343,8 +345,7 @@ async def performer_order_payout(order_id: int, performer_id: int) -> None:
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
             current_status_value = order_status_value(current_status)
-            if current_status_value != OrderStates.AWAITING_PERFORMER_PAYOUT.value:
-                raise ValidationError()
+            ensure_order_status(current_status_value, OrderStates.AWAITING_PERFORMER_PAYOUT)
 
             await session.execute(
                 update(Order)
@@ -369,13 +370,12 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                 order_id,
                 performer_id,
             )
+            if order_status_value(current_status) == OrderStates.AWAITING_PAYMENT.value:
+                await cancle_unpayment_deal(payment_operation_id)
+                await set_softdeclined_order_status(session, order_id, current_status, performer_id)
+                return
             await refund_money(payment_operation_id)
-            await set_performer_declined_order_status(
-                session,
-                order_id,
-                current_status,
-                performer_id,
-            )
+            await set_performer_declined_order_status(session, order_id, current_status, performer_id)
 
 
 async def client_softdecline_order(order_id: int, client_id: int) -> None:
@@ -404,6 +404,13 @@ async def client_harddecline_order(order_id: int, client_id: int) -> None:
             )
             if current_status is None:
                 raise OrderNotFoundError()
+            ensure_order_status(
+                current_status,
+                (
+                    OrderStates.AWAITING_PERFORMER_CONFIRMATION,
+                    OrderStates.AWAITING_CLIENT_CONFIRMATION,
+                ),
+            )
 
             await session.execute(
                 update(Order)
@@ -436,6 +443,7 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
             current_status, client_id = order_row
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
+            ensure_order_status(current_status, OrderStates.AWAITING_CONFLICT)
 
             await session.execute(
                 update(Order)
