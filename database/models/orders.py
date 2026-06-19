@@ -53,9 +53,9 @@ class Order(Base):
         default=OrderStates.AWAITING_PERFORMER,
         server_default=OrderStates.AWAITING_PERFORMER.value,
     )
-    checked_by_worker_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True)
+    checked_by_worker_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
 
-    expire_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    expire_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
