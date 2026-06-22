@@ -1,3 +1,4 @@
+from api.payments.utils.balance_methods import get_sd_balance
 from api.payments.utils.cancle_unpayment_deal_methods import cancle_registered_deal
 from api.payments.utils.complete_paymented_deal_methods import complete_registered_deal
 from api.payments.utils.generate_payment_link_methods import create_payment_link
@@ -61,3 +62,8 @@ async def refund_money(
 ) -> dict[str, object]:
     """Возвращаем средства заказчику после заморозки."""
     return await refund_registered_deal(paygine_payment_operation_id)
+
+
+async def get_balance() -> dict[str, object]:
+    """Получаем баланс кубышки."""
+    return await get_sd_balance()

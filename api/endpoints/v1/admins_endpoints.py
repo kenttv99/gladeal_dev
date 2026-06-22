@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Query
 
 from api.enums.enums_v1 import OrderStates
+from api.payments.payments_methods import get_balance as get_balance_method
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
     AdminOrdersResponse,
@@ -62,8 +63,9 @@ async def get_order_info(order_id: int = Query(..., ge=1)) -> AdminOrderInfoResp
     return await get_order_info_method(order_id)
 
 @router.get("/get_balance")
-async def get_balance():
-    pass
+async def get_balance() -> dict[str, object]:
+    """Получаем баланс кубышки."""
+    return await get_balance_method()
 
 @router.get("/close_to_client")
 async def close_to_client():
