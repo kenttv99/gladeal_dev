@@ -6,12 +6,14 @@ from api.enums.enums_v1 import OrderStates
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
     AdminOrdersResponse,
+    AdminUserBanResponse,
     AdminUsersResponse,
 )
 from api.utils.admins_methods import (
     get_order_info as get_order_info_method,
     get_orders as get_orders_method,
     get_users as get_users_method,
+    set_user_ban_state,
 )
 
 
@@ -73,10 +75,15 @@ async def close_to_performer():
 
 
 @router.get("/ban_user")
-async def ban_user():
-    pass
+async def ban_user(
+    user_id: int = Query(..., ge=1),
+    ban_reason: str | None = None,
+) -> AdminUserBanResponse:
+    """Баним пользователя с сохранением причины."""
+    return await set_user_ban_state(user_id, True, ban_reason)
 
 
 @router.get("/unban_user")
-async def unban_user():
-    pass
+async def unban_user(user_id: int = Query(..., ge=1)) -> AdminUserBanResponse:
+    """Снимаем бан пользователя."""
+    return await set_user_ban_state(user_id, False)

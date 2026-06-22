@@ -12,6 +12,7 @@ from api.schemas.schemas_v1 import (
     AdminOrderResponse,
     AdminOrdersResponse,
     AdminOrderStatusHistoryResponse,
+    AdminUserBanResponse,
     AdminUserResponse,
     AdminUsersResponse,
 )
@@ -247,6 +248,46 @@ async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
             )
             for history in status_history
         ],
+    )
+
+
+async def set_user_ban_state(
+    user_id: int,
+    is_banned: bool,
+    ban_reason: str | None = None,
+) -> AdminUserBanResponse:
+    """Устанавливаем или снимаем бан пользователя одним методом."""
+    values = (
+        {
+            "is_banned": True,
+            "ban_reason": ban_reason,
+            "banned_at": func.now(),
+        }
+        if is_banned
+        else {
+            "is_banned": False,
+            "ban_reason": None,
+            "banned_at": None,
+        }
+    )
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            result = await session.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(**values)
+                .returning(User.id, User.is_banned, User.ban_reason, User.banned_at)
+            )
+            row = result.one_or_none()
+            if row is None:
+                raise ValidationError()
+
+    return AdminUserBanResponse(
+        id=row.id,
+        is_banned=row.is_banned,
+        ban_reason=row.ban_reason,
+        banned_at=row.banned_at,
     )
 
 

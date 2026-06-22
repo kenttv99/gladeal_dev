@@ -56,6 +56,13 @@ class AdminUsersResponse(BaseModel):
     items: list[AdminUserResponse]
 
 
+class AdminUserBanResponse(BaseModel):
+    id: int
+    is_banned: bool
+    ban_reason: str | None
+    banned_at: datetime | None
+
+
 class AdminOrderResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
