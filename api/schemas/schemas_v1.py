@@ -56,6 +56,25 @@ class AdminUsersResponse(BaseModel):
     items: list[AdminUserResponse]
 
 
+class AdminOrderResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    order_id: int
+    client_id: int
+    performer_id: int | None
+    status: OrderStates
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class AdminOrdersResponse(BaseModel):
+    limit: int
+    has_more: bool
+    next_cursor_created_at: datetime | None
+    next_cursor_id: int | None
+    items: list[AdminOrderResponse]
+
+
 ###
 # Сделки
 ###

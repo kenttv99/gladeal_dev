@@ -7,7 +7,12 @@ from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import AdminRoles, OrderStates
 from api.exceptions import ValidationError
-from api.schemas.schemas_v1 import AdminUserResponse, AdminUsersResponse
+from api.schemas.schemas_v1 import (
+    AdminOrderResponse,
+    AdminOrdersResponse,
+    AdminUserResponse,
+    AdminUsersResponse,
+)
 from api.utils.admin_password_methods import (
     hash_admin_password,
     read_admin_password_hash,
@@ -116,6 +121,85 @@ async def get_users(
         has_more=has_more,
         next_cursor_created_at=items[-1].created_at if has_more else None,
         next_cursor_id=items[-1].id if has_more else None,
+        items=items,
+    )
+
+
+async def get_orders(
+    orders_limit: int,
+    orders_cursor_created_at: datetime | None = None,
+    orders_cursor_id: int | None = None,
+    client_id: int | None = None,
+    performer_id: int | None = None,
+    status: OrderStates | str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    completed_from: datetime | None = None,
+    completed_to: datetime | None = None,
+) -> AdminOrdersResponse:
+    """Получаем страницу сделок с параллельной фильтрацией по пользователям, статусу и датам."""
+    if (orders_cursor_created_at is None) != (orders_cursor_id is None):
+        raise ValidationError()
+    if created_from is not None and created_to is not None and created_from > created_to:
+        raise ValidationError()
+    if completed_from is not None and completed_to is not None and completed_from > completed_to:
+        raise ValidationError()
+
+    status_value = status.value if isinstance(status, OrderStates) else status
+    filters = (
+        (Order.client_id == client_id,) if client_id is not None else ()
+    ) + (
+        (Order.performer_id == performer_id,) if performer_id is not None else ()
+    ) + (
+        (Order.status == status_value,) if status_value is not None else ()
+    ) + (
+        (Order.created_at >= created_from,) if created_from is not None else ()
+    ) + (
+        (Order.created_at <= created_to,) if created_to is not None else ()
+    ) + (
+        (Order.completed_at >= completed_from,) if completed_from is not None else ()
+    ) + (
+        (Order.completed_at <= completed_to,) if completed_to is not None else ()
+    )
+    cursor_filter = (
+        (
+            or_(
+                Order.created_at < orders_cursor_created_at,
+                and_(Order.created_at == orders_cursor_created_at, Order.id < orders_cursor_id),
+            ),
+        )
+        if orders_cursor_created_at is not None and orders_cursor_id is not None
+        else ()
+    )
+
+    async with AsyncSessionLocal() as session:
+        result = await session.scalars(
+            select(Order)
+            .where(*filters, *cursor_filter)
+            .order_by(Order.created_at.desc(), Order.id.desc())
+            .limit(orders_limit + 1)
+        )
+        page_orders = list(result.all())
+
+    has_more = len(page_orders) > orders_limit
+    orders = page_orders[:orders_limit]
+    items = [
+        AdminOrderResponse(
+            order_id=order.id,
+            client_id=order.client_id,
+            performer_id=order.performer_id,
+            status=order.status,
+            created_at=order.created_at,
+            completed_at=order.completed_at,
+        )
+        for order in orders
+    ]
+
+    return AdminOrdersResponse(
+        limit=orders_limit,
+        has_more=has_more,
+        next_cursor_created_at=items[-1].created_at if has_more else None,
+        next_cursor_id=items[-1].order_id if has_more else None,
         items=items,
     )
 
