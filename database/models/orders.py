@@ -36,6 +36,8 @@ class Order(Base):
         Index("ix_orders_performer_id", "performer_id"),
         Index("ix_orders_status", "status"),
         Index("ix_orders_created_at", "created_at"),
+        Index("ix_orders_client_created_id", "client_id", "created_at", "id"),
+        Index("ix_orders_performer_created_id", "performer_id", "created_at", "id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

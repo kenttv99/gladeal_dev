@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
 
-from sqlalchemy import func, insert, literal, select, union_all, update
+from sqlalchemy import and_, insert, literal, or_, select, true, union_all, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import AdminRoles, OrderStates, UserRoles
@@ -11,6 +12,7 @@ from api.schemas.schemas_v1 import (
     AdminUserOrdersResponse,
     AdminUserResponse,
 )
+from api.exceptions import ValidationError
 from api.utils.admin_password_methods import (
     hash_admin_password,
     read_admin_password_hash,
@@ -35,12 +37,27 @@ def _order_status_value(status: OrderStates | str | None) -> str | None:
 
 async def get_users(
     orders_limit: int,
-    orders_offset: int,
+    orders_cursor_created_at: datetime | None = None,
+    orders_cursor_id: int | None = None,
     order_status: OrderStates | str | None = None,
+    orders_created_from: datetime | None = None,
+    orders_created_to: datetime | None = None,
 ) -> list[AdminUserResponse]:
-    """Получаем всех пользователей с общей информацией и страницей истории сделок."""
+    """Получаем всех пользователей с общей информацией и keyset-страницей истории сделок."""
+    if (orders_cursor_created_at is None) != (orders_cursor_id is None):
+        raise ValidationError()
+    if (
+        orders_created_from is not None
+        and orders_created_to is not None
+        and orders_created_from > orders_created_to
+    ):
+        raise ValidationError()
+
     status_value = _order_status_value(order_status)
     status_filter = (Order.status == status_value,) if status_value else ()
+    created_from_filter = (Order.created_at >= orders_created_from,) if orders_created_from else ()
+    created_to_filter = (Order.created_at <= orders_created_to,) if orders_created_to else ()
+    order_filters = (*status_filter, *created_from_filter, *created_to_filter)
 
     client_orders = select(
         Order.client_id.label("user_id"),
@@ -49,7 +66,7 @@ async def get_users(
         Order.status.label("status"),
         Order.created_at.label("created_at"),
         literal(UserRoles.CLIENT.value).label("user_order_role"),
-    ).where(*status_filter)
+    ).where(Order.client_id == User.id, *order_filters).correlate(User)
     performer_orders = select(
         Order.performer_id.label("user_id"),
         Order.id.label("id"),
@@ -57,45 +74,58 @@ async def get_users(
         Order.status.label("status"),
         Order.created_at.label("created_at"),
         literal(UserRoles.PERFORMER.value).label("user_order_role"),
-    ).where(Order.performer_id.is_not(None), *status_filter)
+    ).where(Order.performer_id == User.id, *order_filters).correlate(User)
     orders = union_all(client_orders, performer_orders).subquery()
-    ranked_orders = select(
-        orders,
-        func.row_number()
-        .over(partition_by=orders.c.user_id, order_by=orders.c.created_at.desc())
-        .label("row_number"),
-    ).subquery()
+    cursor_filter = (
+        (
+            or_(
+                orders.c.created_at < orders_cursor_created_at,
+                and_(orders.c.created_at == orders_cursor_created_at, orders.c.id < orders_cursor_id),
+            ),
+        )
+        if orders_cursor_created_at is not None and orders_cursor_id is not None
+        else ()
+    )
+    user_orders = (
+        select(orders)
+        .where(*cursor_filter)
+        .order_by(orders.c.created_at.desc(), orders.c.id.desc())
+        .limit(orders_limit + 1)
+        .lateral("user_orders")
+    )
 
     async with AsyncSessionLocal() as session:
-        users_result = await session.execute(select(User).order_by(User.created_at.desc()))
-        users = list(users_result.scalars().all())
-
-        totals_result = await session.execute(
-            select(orders.c.user_id, func.count().label("total")).group_by(orders.c.user_id)
-        )
-        totals: dict[int, int] = {
-            int(row.user_id): int(row.total)
-            for row in totals_result.mappings().all()
-            if row["user_id"] is not None
-        }
-
-        orders_result = await session.execute(
-            select(ranked_orders)
-            .where(
-                ranked_orders.c.row_number > orders_offset,
-                ranked_orders.c.row_number <= orders_offset + orders_limit,
+        result = await session.execute(
+            select(
+                User,
+                user_orders.c.id.label("order_id"),
+                user_orders.c.title,
+                user_orders.c.status,
+                user_orders.c.created_at.label("order_created_at"),
+                user_orders.c.user_order_role,
             )
-            .order_by(ranked_orders.c.user_id, ranked_orders.c.row_number)
+            .outerjoin(user_orders, true())
+            .order_by(User.created_at.desc(), user_orders.c.created_at.desc(), user_orders.c.id.desc())
         )
 
-    orders_by_user = defaultdict(list)
-    for order in orders_result.mappings().all():
-        orders_by_user[order["user_id"]].append(
+    users: dict[int, User] = {}
+    orders_by_user: defaultdict[int, list[AdminUserOrderResponse]] = defaultdict(list)
+    has_more_by_user: set[int] = set()
+    for row in result.all():
+        user = row[0]
+        users[user.id] = user
+        if row.order_id is None:
+            continue
+        if len(orders_by_user[user.id]) == orders_limit:
+            has_more_by_user.add(user.id)
+            continue
+        orders_by_user[user.id].append(
             AdminUserOrderResponse(
-                id=order["id"],
-                title=order["title"],
-                status=order["status"],
-                user_order_role=order["user_order_role"],
+                id=row.order_id,
+                title=row.title,
+                status=row.status,
+                created_at=row.order_created_at,
+                user_order_role=row.user_order_role,
             )
         )
 
@@ -114,12 +144,17 @@ async def get_users(
             updated_at=user.updated_at,
             orders=AdminUserOrdersResponse(
                 limit=orders_limit,
-                offset=orders_offset,
-                total=totals.get(int(user.id), 0),
+                has_more=user.id in has_more_by_user,
+                next_cursor_created_at=orders_by_user[user.id][-1].created_at
+                if user.id in has_more_by_user
+                else None,
+                next_cursor_id=orders_by_user[user.id][-1].id
+                if user.id in has_more_by_user
+                else None,
                 items=orders_by_user[user.id],
             ),
         )
-        for user in users
+        for user in users.values()
     ]
 
 

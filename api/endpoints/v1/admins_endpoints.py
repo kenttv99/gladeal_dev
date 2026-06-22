@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Query
 
 from api.enums.enums_v1 import OrderStates
@@ -11,11 +13,21 @@ router = APIRouter()
 @router.get("/get_users")
 async def get_users(
     orders_limit: int = Query(20, ge=1, le=100),
-    orders_offset: int = Query(0, ge=0),
+    orders_cursor_created_at: datetime | None = None,
+    orders_cursor_id: int | None = Query(None, ge=1),
     order_status: OrderStates | None = None,
+    orders_created_from: datetime | None = None,
+    orders_created_to: datetime | None = None,
 ) -> list[AdminUserResponse]:
     """Получаем всех пользователей с общей информацией и историей сделок."""
-    return await get_users_method(orders_limit, orders_offset, order_status)
+    return await get_users_method(
+        orders_limit,
+        orders_cursor_created_at,
+        orders_cursor_id,
+        order_status,
+        orders_created_from,
+        orders_created_to,
+    )
 
 @router.get("/get_orders")
 async def get_orders():
@@ -46,4 +58,3 @@ async def ban_user():
 @router.get("/unban_user")
 async def unban_user():
     pass
-

@@ -35,13 +35,15 @@ class AdminUserOrderResponse(BaseModel):
     id: int
     title: str
     status: OrderStates
+    created_at: datetime
     user_order_role: str
 
 
 class AdminUserOrdersResponse(BaseModel):
     limit: int
-    offset: int
-    total: int
+    has_more: bool
+    next_cursor_created_at: datetime | None
+    next_cursor_id: int | None
     items: list[AdminUserOrderResponse]
 
 
