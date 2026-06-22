@@ -73,7 +73,11 @@ async def get_users(
         totals_result = await session.execute(
             select(orders.c.user_id, func.count().label("total")).group_by(orders.c.user_id)
         )
-        totals = dict(totals_result.all())
+        totals: dict[int, int] = {
+            int(row.user_id): int(row.total)
+            for row in totals_result.mappings().all()
+            if row["user_id"] is not None
+        }
 
         orders_result = await session.execute(
             select(ranked_orders)
@@ -111,7 +115,7 @@ async def get_users(
             orders=AdminUserOrdersResponse(
                 limit=orders_limit,
                 offset=orders_offset,
-                total=totals.get(user.id, 0),
+                total=totals.get(int(user.id), 0),
                 items=orders_by_user[user.id],
             ),
         )
