@@ -29,24 +29,6 @@ class AccessTokenRefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class AdminUserOrderResponse(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
-
-    id: int
-    title: str
-    status: OrderStates
-    created_at: datetime
-    user_order_role: str
-
-
-class AdminUserOrdersResponse(BaseModel):
-    limit: int
-    has_more: bool
-    next_cursor_created_at: datetime | None
-    next_cursor_id: int | None
-    items: list[AdminUserOrderResponse]
-
-
 class AdminUserResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
@@ -61,7 +43,17 @@ class AdminUserResponse(BaseModel):
     role: UserRoles
     created_at: datetime
     updated_at: datetime
-    orders: AdminUserOrdersResponse
+    successful_orders_count: int
+    unsuccessful_orders_count: int
+    conflict_orders_count: int
+
+
+class AdminUsersResponse(BaseModel):
+    limit: int
+    has_more: bool
+    next_cursor_created_at: datetime | None
+    next_cursor_id: int | None
+    items: list[AdminUserResponse]
 
 
 ###

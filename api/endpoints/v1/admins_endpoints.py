@@ -2,8 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Query
 
-from api.enums.enums_v1 import OrderStates
-from api.schemas.schemas_v1 import AdminUserResponse
+from api.schemas.schemas_v1 import AdminUsersResponse
 from api.utils.admins_methods import get_users as get_users_method
 
 
@@ -12,22 +11,12 @@ router = APIRouter()
 
 @router.get("/get_users")
 async def get_users(
-    orders_limit: int = Query(20, ge=1, le=100),
-    orders_cursor_created_at: datetime | None = None,
-    orders_cursor_id: int | None = Query(None, ge=1),
-    order_status: OrderStates | None = None,
-    orders_created_from: datetime | None = None,
-    orders_created_to: datetime | None = None,
-) -> list[AdminUserResponse]:
-    """Получаем всех пользователей с общей информацией и историей сделок."""
-    return await get_users_method(
-        orders_limit,
-        orders_cursor_created_at,
-        orders_cursor_id,
-        order_status,
-        orders_created_from,
-        orders_created_to,
-    )
+    users_limit: int = Query(20, ge=1, le=100),
+    users_cursor_created_at: datetime | None = None,
+    users_cursor_id: int | None = Query(None, ge=1),
+) -> AdminUsersResponse:
+    """Получаем всех пользователей с общей информацией и счетчиками сделок."""
+    return await get_users_method(users_limit, users_cursor_created_at, users_cursor_id)
 
 @router.get("/get_orders")
 async def get_orders():
