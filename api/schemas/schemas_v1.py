@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from api.enums.enums_v1 import OrderStates
+from api.enums.enums_v1 import OrderStates, UserRoles
 
 
 ###
@@ -27,6 +27,39 @@ class AuthUserResponse(BaseModel):
 class AccessTokenRefreshResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class AdminUserOrderResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: int
+    title: str
+    status: OrderStates
+    user_order_role: str
+
+
+class AdminUserOrdersResponse(BaseModel):
+    limit: int
+    offset: int
+    total: int
+    items: list[AdminUserOrderResponse]
+
+
+class AdminUserResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: int
+    first_name: str
+    last_name: str
+    phone_number: str
+    ppd: bool
+    is_banned: bool
+    ban_reason: str | None
+    banned_at: datetime | None
+    role: UserRoles
+    created_at: datetime
+    updated_at: datetime
+    orders: AdminUserOrdersResponse
 
 
 ###

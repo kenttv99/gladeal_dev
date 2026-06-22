@@ -1,12 +1,21 @@
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Query
+
+from api.enums.enums_v1 import OrderStates
+from api.schemas.schemas_v1 import AdminUserResponse
+from api.utils.admins_methods import get_users as get_users_method
 
 
 router = APIRouter()
 
 
 @router.get("/get_users")
-async def get_users():
-    pass
+async def get_users(
+    orders_limit: int = Query(20, ge=1, le=100),
+    orders_offset: int = Query(0, ge=0),
+    order_status: OrderStates | None = None,
+) -> list[AdminUserResponse]:
+    """Получаем всех пользователей с общей информацией и историей сделок."""
+    return await get_users_method(orders_limit, orders_offset, order_status)
 
 @router.get("/get_orders")
 async def get_orders():
