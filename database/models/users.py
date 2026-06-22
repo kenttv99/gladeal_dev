@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.enums.enums_v1 import UserRoles
+from api.enums.enums_v1 import UserRoles, AdminRoles
 
 from .base import Base, enum_column
 
@@ -91,3 +91,67 @@ class UserRefreshToken(Base):
     )
 
     user: Mapped["User"] = relationship("User", back_populates="refresh_tokens")
+
+
+class Admin(Base):
+    """Пользователь системы: администраторы и саппорты"""
+
+    __tablename__ = "admins"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    first_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    role: Mapped[AdminRoles] = mapped_column(
+        enum_column(AdminRoles, "admin_roles"),
+        nullable=False,
+        default=AdminRoles.ADMIN,
+        server_default=AdminRoles.ADMIN.value,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    refresh_tokens: Mapped[list["AdminRefreshToken"]] = relationship(
+        "AdminRefreshToken",
+        back_populates="admin",
+        cascade="all, delete-orphan",
+    )
+
+
+class AdminRefreshToken(Base):
+    """Refresh токен с привязкой к id админа"""
+
+    __tablename__ = "admin_refresh_tokens"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    admin_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("admins.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    admin: Mapped["Admin"] = relationship("Admin", back_populates="refresh_tokens")

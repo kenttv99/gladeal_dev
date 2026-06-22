@@ -39,6 +39,12 @@ class UserRoles(Enum):
     CLIENT = "client"
 
 
+class AdminRoles(Enum):
+    SUPERUSER = "superuser"
+    ADMIN = "admin"
+    SUPPORT = "support"
+
+
 class OrderPaymentStates(Enum):
     REGISTERED = "registered"
     AUTHORIZED = "authorized"
