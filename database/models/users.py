@@ -25,6 +25,9 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     ppd: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    is_banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    ban_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     role: Mapped[UserRoles] = mapped_column(
         enum_column(UserRoles, "user_roles"),
         nullable=False,

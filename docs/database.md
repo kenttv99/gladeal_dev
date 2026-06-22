@@ -32,6 +32,9 @@
 - `last_name`
 - `phone_number`
 - `ppd`
+- `is_banned`
+- `ban_reason`
+- `banned_at`
 - `role`
 - `created_at`
 - `updated_at`
@@ -39,8 +42,31 @@
 Особенности:
 
 - `phone_number` уникален.
+- `is_banned` отмечает блокировку пользователя.
+- `ban_reason` и `banned_at` хранят метаданные блокировки.
 - `role` использует `UserRoles`.
 - `id` связан с `orders.client_id`, `orders.performer_id`, `notifications.user_id` и `user_refresh_tokens.user_id`.
+
+### `admins`
+
+Администраторы и саппорты.
+
+Поля:
+
+- `id`
+- `first_name`
+- `last_name`
+- `email`
+- `password_hash`
+- `role`
+- `created_at`
+- `updated_at`
+
+Особенности:
+
+- `email` уникален.
+- `password_hash` хранит хеш пароля администратора.
+- `role` использует `AdminRoles`.
 
 ### `user_refresh_tokens`
 
@@ -60,6 +86,25 @@ Refresh token-ы пользователей.
 - `user_id -> users.id` с `ON DELETE CASCADE`.
 - `token_hash` уникален.
 - таблица используется для refresh flow и logout.
+
+### `admin_refresh_tokens`
+
+Refresh token-ы администраторов.
+
+Поля:
+
+- `id`
+- `admin_id`
+- `token_hash`
+- `expires_at`
+- `created_at`
+- `updated_at`
+
+Особенности:
+
+- `admin_id -> admins.id` с `ON DELETE CASCADE`.
+- `token_hash` уникален.
+- таблица используется для admin refresh flow и logout.
 
 ### `orders`
 
@@ -183,6 +228,7 @@ Refresh token-ы пользователей.
 - `order_status_history.changed_by_user_id -> users.id`
 - `notifications.user_id -> users.id`
 - `user_refresh_tokens.user_id -> users.id`
+- `admin_refresh_tokens.admin_id -> admins.id`
 
 ## Enum-поля
 
@@ -191,6 +237,7 @@ Enum-поля хранятся как `VARCHAR + CHECK constraint`, без Postg
 Основные enum-наборы:
 
 - `UserRoles`: `client`, `performer`
+- `AdminRoles`: `superuser`, `admin`, `support`
 - `OrderStates`: статусы сделок, включая `awaiting_performer_payout`
 - `OrderPaymentStates`: `registered`, `authorized`, `completed`, `blocked`, `canceled`, `expired`
 - `NotificationTypes`: `order`, `review`, `promotion`, `news`
