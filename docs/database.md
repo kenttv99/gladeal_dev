@@ -65,7 +65,7 @@
 Особенности:
 
 - `email` уникален.
-- `password_hash` хранит хеш пароля администратора.
+- `password_hash` хранит Argon2id-хеш пароля администратора.
 - `role` использует `AdminRoles`.
 
 ### `user_refresh_tokens`

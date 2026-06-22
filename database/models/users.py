@@ -104,7 +104,7 @@ class Admin(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     first_name: Mapped[str] = mapped_column(String(128), nullable=False)
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    email: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[AdminRoles] = mapped_column(
         enum_column(AdminRoles, "admin_roles"),
