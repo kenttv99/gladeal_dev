@@ -3,8 +3,13 @@ from datetime import datetime
 from fastapi import APIRouter, Query
 
 from api.enums.enums_v1 import OrderStates
-from api.schemas.schemas_v1 import AdminOrdersResponse, AdminUsersResponse
+from api.schemas.schemas_v1 import (
+    AdminOrderInfoResponse,
+    AdminOrdersResponse,
+    AdminUsersResponse,
+)
 from api.utils.admins_methods import (
+    get_order_info as get_order_info_method,
     get_orders as get_orders_method,
     get_users as get_users_method,
 )
@@ -50,8 +55,9 @@ async def get_orders(
     )
 
 @router.get("/get_order_info")
-async def get_order_info():
-    pass
+async def get_order_info(order_id: int = Query(..., ge=1)) -> AdminOrderInfoResponse:
+    """Получаем полную информацию о сделке и историю статусов."""
+    return await get_order_info_method(order_id)
 
 @router.get("/get_balance")
 async def get_balance():

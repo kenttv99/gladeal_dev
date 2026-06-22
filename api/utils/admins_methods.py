@@ -6,10 +6,12 @@ from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import AdminRoles, OrderStates
-from api.exceptions import ValidationError
+from api.exceptions import OrderNotFoundError, ValidationError
 from api.schemas.schemas_v1 import (
+    AdminOrderInfoResponse,
     AdminOrderResponse,
     AdminOrdersResponse,
+    AdminOrderStatusHistoryResponse,
     AdminUserResponse,
     AdminUsersResponse,
 )
@@ -19,7 +21,7 @@ from api.utils.admin_password_methods import (
     verify_admin_password_hash,
 )
 from database.config import AsyncSessionLocal
-from database.models.orders import Order
+from database.models.orders import Order, OrderStatusHistory
 from database.models.users import Admin, User
 
 
@@ -137,7 +139,7 @@ async def get_orders(
     completed_from: datetime | None = None,
     completed_to: datetime | None = None,
 ) -> AdminOrdersResponse:
-    """Получаем страницу сделок с параллельной фильтрацией по пользователям, статусу и датам."""
+    """Получаем страницу сделок с фильтрацией по пользователям, статусу и датам."""
     if (orders_cursor_created_at is None) != (orders_cursor_id is None):
         raise ValidationError()
     if created_from is not None and created_to is not None and created_from > created_to:
@@ -201,6 +203,50 @@ async def get_orders(
         next_cursor_created_at=items[-1].created_at if has_more else None,
         next_cursor_id=items[-1].order_id if has_more else None,
         items=items,
+    )
+
+
+async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
+    """Получаем полную информацию о сделке и историю изменения статусов."""
+    async with AsyncSessionLocal() as session:
+        order = await session.scalar(select(Order).where(Order.id == order_id))
+        if order is None:
+            raise OrderNotFoundError()
+
+        history_result = await session.scalars(
+            select(OrderStatusHistory)
+            .where(OrderStatusHistory.order_id == order_id)
+            .order_by(OrderStatusHistory.created_at.asc(), OrderStatusHistory.id.asc())
+        )
+        status_history = list(history_result.all())
+
+    return AdminOrderInfoResponse(
+        id=order.id,
+        client_id=order.client_id,
+        performer_id=order.performer_id,
+        title=order.title,
+        conditions=order.conditions,
+        result_requirements=order.result_requirements,
+        violation_proof_requirements=order.violation_proof_requirements,
+        slug=order.slug,
+        price=order.price,
+        status=order.status,
+        checked_by_worker_at=order.checked_by_worker_at,
+        expire_in=order.expire_in,
+        created_at=order.created_at,
+        updated_at=order.updated_at,
+        completed_at=order.completed_at,
+        status_history=[
+            AdminOrderStatusHistoryResponse(
+                id=history.id,
+                order_id=history.order_id,
+                old_status=history.old_status,
+                new_status=history.new_status,
+                changed_by_user_id=history.changed_by_user_id,
+                created_at=history.created_at,
+            )
+            for history in status_history
+        ],
     )
 
 

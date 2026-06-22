@@ -75,6 +75,38 @@ class AdminOrdersResponse(BaseModel):
     items: list[AdminOrderResponse]
 
 
+class AdminOrderStatusHistoryResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: int
+    order_id: int
+    old_status: OrderStates | None
+    new_status: OrderStates
+    changed_by_user_id: int | None
+    created_at: datetime
+
+
+class AdminOrderInfoResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: int
+    client_id: int
+    performer_id: int | None
+    title: str
+    conditions: str
+    result_requirements: str
+    violation_proof_requirements: str
+    slug: str
+    price: Decimal
+    status: OrderStates
+    checked_by_worker_at: datetime | None
+    expire_in: datetime
+    created_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None
+    status_history: list[AdminOrderStatusHistoryResponse]
+
+
 ###
 # Сделки
 ###
