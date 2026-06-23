@@ -6,7 +6,7 @@ from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import AdminRoles, OrderStates
-from api.exceptions import OrderNotFoundError, ValidationError
+from api.exceptions import InvalidCredentialsError, OrderNotFoundError, ValidationError
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
     AdminOrderResponse,
@@ -32,6 +32,15 @@ def _parse_role(value: str) -> AdminRoles:
     except ValueError as exc:
         options = ", ".join(role.value for role in AdminRoles)
         raise ValueError(f"role must be one of: {options}") from exc
+
+
+async def authenticate_admin(email: str, password: str) -> int:
+    """Проверяем email и пароль администратора для авторизации."""
+    async with AsyncSessionLocal() as session:
+        admin = await session.scalar(select(Admin).where(Admin.email == email))
+        if admin is None or not verify_admin_password_hash(password, admin.password_hash):
+            raise InvalidCredentialsError()
+        return admin.id
 
 
 async def get_users(

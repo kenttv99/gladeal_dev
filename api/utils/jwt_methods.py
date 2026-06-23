@@ -23,7 +23,7 @@ from api.exceptions import (
     RefreshTokenExpiredError,
 )
 from database.config import AsyncSessionLocal
-from database.models.users import UserRefreshToken
+from database.models.users import AdminRefreshToken, UserRefreshToken
 
 
 auth_scheme = HTTPBasic(
@@ -39,6 +39,20 @@ def generate_access_token(user_id: int) -> str:
         {
             "sub": str(user_id),
             "user_id": user_id,
+            "iat": now,
+            "exp": now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
+        },
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def generate_admin_access_token(admin_id: int) -> str:
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "sub": str(admin_id),
+            "admin_id": admin_id,
             "iat": now,
             "exp": now + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES),
         },
@@ -65,6 +79,24 @@ async def create_refresh_token(user_id: int) -> tuple[str, datetime]:
             await session.execute(
                 insert(UserRefreshToken).values(
                     user_id=user_id,
+                    token_hash=get_refresh_token_hash(refresh_token),
+                    expires_at=expires_at,
+                )
+            )
+
+    return refresh_token, expires_at
+
+
+async def create_admin_refresh_token(admin_id: int) -> tuple[str, datetime]:
+    refresh_token = generate_refresh_token()
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=JWT_REFRESH_TOKEN_EXPIRE_MINUTES)
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            await session.execute(
+                insert(AdminRefreshToken).values(
+                    admin_id=admin_id,
                     token_hash=get_refresh_token_hash(refresh_token),
                     expires_at=expires_at,
                 )
@@ -101,6 +133,19 @@ async def revoke_refresh_token(refresh_token: str) -> None:
             token = await session.scalar(
                 select(UserRefreshToken).where(
                     UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token)
+                )
+            )
+            if token is None:
+                raise InvalidRefreshTokenError()
+            await session.delete(token)
+
+
+async def revoke_admin_refresh_token(refresh_token: str) -> None:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            token = await session.scalar(
+                select(AdminRefreshToken).where(
+                    AdminRefreshToken.token_hash == get_refresh_token_hash(refresh_token)
                 )
             )
             if token is None:

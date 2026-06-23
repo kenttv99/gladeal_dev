@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Body, Query
 
 from api.enums.enums_v1 import OrderStates
 from api.payments.payments_methods import get_balance as get_balance_method
@@ -9,12 +9,19 @@ from api.schemas.schemas_v1 import (
     AdminOrdersResponse,
     AdminUserBanResponse,
     AdminUsersResponse,
+    AuthAdminResponse,
 )
 from api.utils.admins_methods import (
+    authenticate_admin,
     get_order_info as get_order_info_method,
     get_orders as get_orders_method,
     get_users as get_users_method,
     set_user_ban_state,
+)
+from api.utils.jwt_methods import (
+    create_admin_refresh_token,
+    generate_admin_access_token,
+    revoke_admin_refresh_token,
 )
 
 
@@ -89,3 +96,25 @@ async def ban_user(
 async def unban_user(user_id: int = Query(..., ge=1)) -> AdminUserBanResponse:
     """Снимаем бан пользователя."""
     return await set_user_ban_state(user_id, False)
+
+
+@router.post("/login")
+async def login(
+    email: str = Body(..., embed=True),
+    password: str = Body(..., embed=True),
+) -> AuthAdminResponse:
+    """Авторизуем администратора по email и паролю."""
+    admin_id = await authenticate_admin(email, password)
+    refresh_token, refresh_token_expires_at = await create_admin_refresh_token(admin_id)
+    return AuthAdminResponse(
+        access_token=generate_admin_access_token(admin_id),
+        refresh_token=refresh_token,
+        refresh_token_expires_at=refresh_token_expires_at,
+    )
+
+
+@router.post("/logout")
+async def logout(refresh_token: str = Body(..., embed=True)) -> dict[str, bool]:
+    """Удаляем refresh token администратора."""
+    await revoke_admin_refresh_token(refresh_token)
+    return {"success": True}
