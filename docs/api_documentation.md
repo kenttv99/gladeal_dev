@@ -228,6 +228,7 @@ Endpoint удаляет запись refresh token из `user_refresh_tokens` и
 - `POST /api/v1/performer/deal_decline` - завершает сделку как `unsuccessful_completion`.
 - `POST /api/v1/performer/deal_conflict` - переводит сделку в `open_conflict`.
 - `GET /api/v1/performer/deal_payout_link` - возвращает signed Paygine URL для получения средств.
+- `GET /api/v1/client/deal_refund_link` - возвращает signed Paygine URL для получения возврата заказчиком.
 - `GET /api/v1/performer/deals_archive` - возвращает закрытые сделки исполнителя.
 
 Исполнитель не может принять или выполнять действия по собственной сделке. Если `client_id` сделки совпадает с `user_id` исполнителя, возвращается `ORDER_SELF_EXECUTION_FORBIDDEN`.
@@ -239,6 +240,7 @@ Endpoint удаляет запись refresh token из `user_refresh_tokens` и
 - `deal_approve` сохраняет `performer_email` в `orders_payment_data` и переводит сделку в `awaiting_payment`.
 - `deal_decline` регистрирует возврат заказчику без сервисной комиссии и сохраняет `paygine_revoked_operation_id`.
 - `deal_payout_link` использует `paygine_payout_operation_id` и строит ссылку на `SDPayOutPage`.
+- `deal_refund_link` использует `paygine_revoked_operation_id` и строит ссылку на `SDPayOutPage`.
 
 ## Платежный контур
 

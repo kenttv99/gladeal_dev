@@ -171,6 +171,23 @@ async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int
         return int(row[0])
 
 
+async def get_order_refund_operation_id(order_id: int, client_id: int) -> int:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(
+                OrderPaymentData.paygine_revoked_operation_id,
+                OrderPaymentData.revoke_status,
+            )
+            .join(Order, Order.id == OrderPaymentData.order_id)
+            .where(Order.id == order_id, Order.client_id == client_id)
+        )
+        row = result.one_or_none()
+        if row is None or row[0] is None:
+            raise OrderNotFoundError()
+        ensure_registered_order_payment_status(row[1])
+        return int(row[0])
+
+
 async def get_order_info_by_slug(slug: str) -> OrderInfoWithPaymentDataResponse:
     """Получаем детальную информацию о сделке по slug."""
     async with AsyncSessionLocal() as session:

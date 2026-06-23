@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from api.enums.enums_v1 import UserRoles
-from api.payments.payments_methods import generate_payment_link
+from api.payments.payments_methods import generate_payment_link, generate_withdrow_link
 from api.schemas.schemas_v1 import (
     CreateOrderRequest,
     CreateOrderResponse,
@@ -19,6 +19,7 @@ from api.utils.orders_methods import (
     get_order_info_by_slug,
     get_order_link,
     get_order_payment_operation_id,
+    get_order_refund_operation_id,
     # payment_order,
 )
 from api.utils.jwt_methods import authorize_user
@@ -109,4 +110,14 @@ async def deal_payment_link(
 ) -> dict[str, str]:
     operation_id = await get_order_payment_operation_id(order_id, authorized_user_id)
     link = await generate_payment_link(operation_id)
+    return {"link": link}
+
+
+@router.get("/deal_refund_link")
+async def deal_refund_link(
+    order_id: int,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, str]:
+    operation_id = await get_order_refund_operation_id(order_id, authorized_user_id)
+    link = await generate_withdrow_link(operation_id)
     return {"link": link}
