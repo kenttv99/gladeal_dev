@@ -14,7 +14,6 @@ from api.exceptions import (
 )
 from api.payments.payments_methods import (
     cancle_unpayment_deal,
-    complete_paymented_deal,
     refund_money,
     register_deposit_deal,
     register_payout_deal,
@@ -25,6 +24,7 @@ from api.schemas.schemas_v1 import (
     OrderInfoWithPaymentDataResponse,
     RegisterDepositDealPaymentRequest,
     RegisterPayoutDealPaymentRequest,
+    RefundMoneyPaymentRequest,
 )
 from api.utils.help_orders_method import (
     ACTIVE_ORDER_STATUSES,
@@ -39,7 +39,7 @@ from api.utils.help_orders_method import (
     generate_order_link,
     get_client_confirm_payment_data,
     get_order_info_payment_data,
-    get_performer_decline_payment_operation_id,
+    get_performer_decline_refund_data,
     get_softdecline_payment_operation_id,
     order_status_value,
     order_status_values,
@@ -306,7 +306,6 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
     async with AsyncSessionLocal() as session:
         async with session.begin():
             payment_data = await get_client_confirm_payment_data(session, order_id, client_id)
-            await complete_paymented_deal(payment_data.paygine_payment_operation_id)
             payout_result = await register_payout_deal(
                 RegisterPayoutDealPaymentRequest(
                     order_id=order_id,
@@ -365,17 +364,39 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
     """Переводим сделку в состояние неуспешного завершения по отказу исполнителя"""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            payment_operation_id, current_status = await get_performer_decline_payment_operation_id(
+            payment_operation_id, refund_data = await get_performer_decline_refund_data(
                 session,
                 order_id,
                 performer_id,
             )
-            if order_status_value(current_status) == OrderStates.AWAITING_PAYMENT.value:
+            if order_status_value(refund_data.current_status) == OrderStates.AWAITING_PAYMENT.value:
+                if payment_operation_id is None:
+                    raise OrderNotFoundError()
                 await cancle_unpayment_deal(payment_operation_id)
-                await set_softdeclined_order_status(session, order_id, current_status, performer_id)
+                await set_softdeclined_order_status(
+                    session,
+                    order_id,
+                    refund_data.current_status,
+                    performer_id,
+                )
                 return
-            await refund_money(payment_operation_id)
-            await set_performer_declined_order_status(session, order_id, current_status, performer_id)
+            refund_result = await refund_money(
+                RefundMoneyPaymentRequest(
+                    order_id=order_id,
+                    client_id=refund_data.client_id,
+                    customer_email=refund_data.customer_email,
+                    customer_phone=refund_data.customer_phone,
+                    amount=refund_data.price,
+                    description=refund_data.title,
+                )
+            )
+            await set_performer_declined_order_status(
+                session,
+                order_id,
+                refund_data.current_status,
+                performer_id,
+                refund_result.payment_values.paygine_payout_operation_id,
+            )
 
 
 async def client_softdecline_order(order_id: int, client_id: int) -> None:

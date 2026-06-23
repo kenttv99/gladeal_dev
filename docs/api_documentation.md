@@ -237,7 +237,7 @@ Endpoint удаляет запись refresh token из `user_refresh_tokens` и
 Платежные эффекты исполнительских endpoint-ов:
 
 - `deal_approve` сохраняет `performer_email` в `orders_payment_data` и переводит сделку в `awaiting_payment`.
-- `deal_decline` вызывает `SDReverse` и переводит payment status в `blocked`.
+- `deal_decline` регистрирует возврат заказчику без сервисной комиссии и сохраняет `paygine_revoked_operation_id`.
 - `deal_payout_link` использует `paygine_payout_operation_id` и строит ссылку на `SDPayOutPage`.
 
 ## Платежный контур

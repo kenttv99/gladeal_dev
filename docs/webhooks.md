@@ -42,11 +42,13 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 
 - `gladeal-order-{order_id}` - депозитная операция;
 - `gladeal-order-{order_id}-payout` - payout-операция.
+- `gladeal-order-{order_id}-refund` - возвратная payout-операция заказчику.
 
 Тип операции определяется по совпадению `data.order_id` с сохраненными:
 
 - `paygine_payment_operation_id`;
 - `paygine_payout_operation_id`.
+- `paygine_revoked_operation_id`.
 
 Если payload не соответствует ожидаемой структуре, выбрасывается `PaymentInvalidProviderResponseError`.
 
@@ -54,12 +56,16 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 
 Для депозитной операции:
 
-- `AUTHORIZED` - `orders_payment_data.payment_status = authorized`, `payment_complete_at = now()`, `orders.status = awaiting_performer_confirmation`, запись добавляется в `order_status_history`.
-- `COMPLETED` - `orders_payment_data.payment_status = completed`.
+- `AUTHORIZED` - вызывается `complete_paymented_deal`, `orders_payment_data.payment_status = authorized`.
+- `COMPLETED` - `orders_payment_data.payment_status = completed`, `payment_complete_at = now()`, `orders.status = awaiting_performer_confirmation`, запись добавляется в `order_status_history`.
 
 Для payout-операции:
 
 - `COMPLETED` - `orders_payment_data.payout_status = completed`, `payout_completed_at = now()`, запись добавляется в `order_status_history`.
+
+Для refund-операции:
+
+- `COMPLETED` - `orders_payment_data.revoke_status = completed`, `revoked_at = now()`.
 
 Статус сделки при `COMPLETED` payout выбирается по текущему бизнес-исходу:
 
@@ -88,5 +94,5 @@ Webhook-слой работает вместе с методами из [payment
 
 - регистрация депозитной сделки на этапе создания заказа;
 - регистрация payout-операции после подтверждения клиентом;
-- возврат средств при отказе исполнителя или при soft decline;
+- регистрация возврата средств при отказе исполнителя или при просрочке;
 - завершение payout-операции после выплаты исполнителю.

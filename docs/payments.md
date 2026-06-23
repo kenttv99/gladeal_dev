@@ -22,7 +22,7 @@
 - `api/payments/utils/generate_withdrow_link_methods.py` - генерация ссылки выплаты исполнителю.
 - `api/payments/utils/complete_paymented_deal_methods.py` - завершение оплаченной сделки.
 - `api/payments/utils/cancle_unpayment_deal_methods.py` - перевод неоплаченной сделки в `EXPIRED`.
-- `api/payments/utils/refund_money_methods.py` - возврат средств заказчику.
+- `api/payments/utils/refund_money_methods.py` - регистрация возврата средств заказчику.
 - `api/payments/payments_methods.py` - публичный фасад для API и воркеров.
 - `api/schemas/schemas_v1.py` - payment request/response модели.
 - `api/servers/payments.py` - отдельное приложение для webhook-ов Paygine.
@@ -139,7 +139,7 @@
 ## Операции завершения
 
 - `complete_paymented_deal` вызывает `POST /webapi/b2puser/sd-services/SDComplete`.
-- `refund_money` вызывает `POST /webapi/b2puser/sd-services/SDReverse`.
+- `refund_money` регистрирует payout-операцию возврата через `POST /webapi/Register` с `client_ref` заказчика и суммой заказа без сервисной комиссии.
 - `cancle_unpayment_deal` вызывает `POST /webapi/ChangeOrderStatus` с `order_state=EXPIRED`.
 
 Все эти методы используют общий `httpx.AsyncClient` и парсят ответ через `parse_paygine_response`.
@@ -152,4 +152,4 @@
 - `workers/utils/order_expire_methods.py` - обработка просроченных сделок.
 - `api/webhooks/v1/order_status_webhook.py` - обработка callback-ов Paygine.
 
-Именно через этот слой в `orders_payment_data` попадают `paygine_payment_operation_id`, `paygine_payout_operation_id`, статусы операций и сроки их истечения.
+Именно через этот слой в `orders_payment_data` попадают `paygine_payment_operation_id`, `paygine_payout_operation_id`, `paygine_revoked_operation_id`, статусы операций и сроки их истечения.

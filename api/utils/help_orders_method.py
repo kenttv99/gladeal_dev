@@ -58,6 +58,16 @@ class ClientConfirmPaymentData:
 
 
 @dataclass(frozen=True)
+class RefundMoneyOrderData:
+    current_status: OrderStates | str | None
+    client_id: int
+    customer_email: str
+    customer_phone: str
+    price: Decimal
+    title: str
+
+
+@dataclass(frozen=True)
 class OrderInfoPaymentData:
     order: Order
     customer_email: str | None
@@ -283,7 +293,7 @@ async def get_client_confirm_payment_data(
         raise ValidationError()
     if performer_phone is None:
         raise UserNotFoundError()
-    ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
+    ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
     return ClientConfirmPaymentData(
         current_status=current_status,
         performer_id=performer_id,
@@ -328,20 +338,25 @@ async def set_client_confirmed_order_status(
     )
 
 
-async def get_performer_decline_payment_operation_id(
+async def get_performer_decline_refund_data(
     session: AsyncSession,
     order_id: int,
     performer_id: int,
-) -> tuple[int, OrderStates | str | None]:
+) -> tuple[int | None, RefundMoneyOrderData]:
     await ensure_user_exists(session, performer_id)
     result = await session.execute(
         select(
             Order.status,
             Order.client_id,
+            Order.price,
+            Order.title,
             OrderPaymentData.paygine_payment_operation_id,
             OrderPaymentData.payment_status,
+            OrderPaymentData.customer_email,
+            User.phone_number,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .join(User, User.id == Order.client_id)
         .where(Order.id == order_id, Order.performer_id == performer_id)
         .with_for_update(of=(Order, OrderPaymentData))
     )
@@ -349,7 +364,16 @@ async def get_performer_decline_payment_operation_id(
     if row is None:
         raise OrderNotFoundError()
 
-    current_status, client_id, payment_operation_id, payment_status = row
+    (
+        current_status,
+        client_id,
+        price,
+        title,
+        payment_operation_id,
+        payment_status,
+        customer_email,
+        customer_phone,
+    ) = row
     if client_id == performer_id:
         raise OrderSelfExecutionForbiddenError()
     ensure_order_status(current_status, PERFORMER_DECLINE_ORDER_STATUSES)
@@ -357,9 +381,24 @@ async def get_performer_decline_payment_operation_id(
         raise OrderNotFoundError()
     if order_status_value(current_status) == OrderStates.AWAITING_PAYMENT.value:
         ensure_registered_order_payment_status(payment_status)
+        return int(payment_operation_id), RefundMoneyOrderData(
+            current_status=current_status,
+            client_id=client_id,
+            customer_email=customer_email,
+            customer_phone=customer_phone,
+            price=price,
+            title=title,
+        )
     else:
-        ensure_order_payment_status(payment_status, OrderPaymentStates.AUTHORIZED)
-    return int(payment_operation_id), current_status
+        ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+    return None, RefundMoneyOrderData(
+        current_status=current_status,
+        client_id=client_id,
+        customer_email=customer_email,
+        customer_phone=customer_phone,
+        price=price,
+        title=title,
+    )
 
 
 async def set_performer_declined_order_status(
@@ -367,6 +406,7 @@ async def set_performer_declined_order_status(
     order_id: int,
     current_status: OrderStates | str | None,
     performer_id: int,
+    refund_operation_id: str,
 ) -> None:
     await session.execute(
         update(Order)
@@ -384,7 +424,8 @@ async def set_performer_declined_order_status(
         update(OrderPaymentData)
         .where(OrderPaymentData.order_id == order_id)
         .values(
-            payment_status=OrderPaymentStates.CANCELED.value,
+            revoke_status=OrderPaymentStates.REGISTERED.value,
+            paygine_revoked_operation_id=refund_operation_id,
             updated_at=func.now(),
         )
     )

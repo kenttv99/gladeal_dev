@@ -13,6 +13,7 @@ from api.schemas.schemas_v1 import (
     RegisterDepositDealPaymentResponse,
     RegisterPayoutDealPaymentRequest,
     RegisterPayoutDealPaymentResponse,
+    RefundMoneyPaymentRequest,
 )
 
 
@@ -58,10 +59,10 @@ async def complete_paymented_deal(
 
 
 async def refund_money(
-    paygine_payment_operation_id: int,
-) -> dict[str, object]:
-    """Возвращаем средства заказчику после заморозки."""
-    return await refund_registered_deal(paygine_payment_operation_id)
+    payment_data: RefundMoneyPaymentRequest,
+) -> RegisterPayoutDealPaymentResponse:
+    """Регистрируем возврат средств заказчику без сервисной комиссии."""
+    return await refund_registered_deal(payment_data)
 
 
 async def get_balance() -> dict[str, object]:

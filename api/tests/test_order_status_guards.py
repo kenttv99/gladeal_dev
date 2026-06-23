@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
@@ -99,8 +100,13 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             patch.object(orders_methods, "AsyncSessionLocal", return_value=session),
             patch.object(
                 orders_methods,
-                "get_performer_decline_payment_operation_id",
-                new=AsyncMock(return_value=(10, OrderStates.AWAITING_PAYMENT.value)),
+                "get_performer_decline_refund_data",
+                new=AsyncMock(
+                    return_value=(
+                        10,
+                        SimpleNamespace(current_status=OrderStates.AWAITING_PAYMENT.value),
+                    )
+                ),
             ),
             patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
             patch.object(orders_methods, "refund_money", new=AsyncMock()) as refund,
@@ -122,11 +128,31 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             patch.object(orders_methods, "AsyncSessionLocal", return_value=session),
             patch.object(
                 orders_methods,
-                "get_performer_decline_payment_operation_id",
-                new=AsyncMock(return_value=(10, OrderStates.AWAITING_CONFLICT.value)),
+                "get_performer_decline_refund_data",
+                new=AsyncMock(
+                    return_value=(
+                        None,
+                        SimpleNamespace(
+                            current_status=OrderStates.AWAITING_CONFLICT.value,
+                            client_id=2,
+                            customer_email="client@example.com",
+                            customer_phone="+79990000000",
+                            price=100,
+                            title="Order",
+                        ),
+                    )
+                ),
             ),
             patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
-            patch.object(orders_methods, "refund_money", new=AsyncMock()) as refund,
+            patch.object(
+                orders_methods,
+                "refund_money",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        payment_values=SimpleNamespace(paygine_payout_operation_id="20")
+                    )
+                ),
+            ) as refund,
             patch.object(
                 orders_methods,
                 "set_performer_declined_order_status",
@@ -136,8 +162,14 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             await orders_methods.performer_decline_order(1, 3)
 
         cancel.assert_not_awaited()
-        refund.assert_awaited_once_with(10)
-        set_status.assert_awaited_once_with(session, 1, OrderStates.AWAITING_CONFLICT.value, 3)
+        refund.assert_awaited_once()
+        set_status.assert_awaited_once_with(
+            session,
+            1,
+            OrderStates.AWAITING_CONFLICT.value,
+            3,
+            "20",
+        )
 
     async def test_client_harddecline_from_allowed_statuses(self):
         for status in (
@@ -211,6 +243,7 @@ class OrderStatusSetterTest(unittest.IsolatedAsyncioTestCase):
             1,
             OrderStates.AWAITING_CONFLICT.value,
             3,
+            "20",
         )
 
         update_sql = str(session.statements[0].compile())
@@ -224,9 +257,10 @@ class OrderStatusSetterTest(unittest.IsolatedAsyncioTestCase):
             OrderStates.UNSUCCESSFUL_COMPLETION.value,
         )
         self.assertEqual(
-            compiled_params(session.statements[2])["payment_status"],
-            OrderPaymentStates.CANCELED.value,
+            compiled_params(session.statements[2])["revoke_status"],
+            OrderPaymentStates.REGISTERED.value,
         )
+        self.assertEqual(compiled_params(session.statements[2])["paygine_revoked_operation_id"], "20")
 
 
 if __name__ == "__main__":

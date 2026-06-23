@@ -59,15 +59,14 @@
 
 Если `expire_in <= текущее время`, воркер:
 
-- вызывает `refund_money(paygine_payment_operation_id)`;
+- регистрирует возврат через `refund_money(...)` с `client_ref` заказчика;
 - переводит сделку в `cancled_by_expire_time_to_client`;
-- устанавливает `orders_payment_data.payment_status = blocked`.
+- сохраняет `paygine_revoked_operation_id` и `revoke_status = registered`.
 
 Сделки в статусе `awaiting_client_confirmation` проверяются по полю `completed_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES`.
 
 Если `completed_at <= текущее время - EXPIRE_TIME_TO_COMNFIRM_MINUTES`, воркер:
 
-- вызывает `complete_paymented_deal(paygine_payment_operation_id)`;
 - регистрирует payout через `register_payout_deal(...)`;
 - переводит сделку в `confirm_by_expire_time_to_performer`;
 - устанавливает `orders_payment_data.payment_status = completed`;

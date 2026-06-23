@@ -1,45 +1,45 @@
 from __future__ import annotations
 
-from api.payments.auth_methods import build_signature
-from api.payments.config import PAYGINE_SECTOR
-from api.payments.http_client import get_paygine_client
-from api.payments.utils.xml_response_parser import parse_paygine_response
-
-
-REFUND_MONEY_ENDPOINT = "/webapi/b2puser/sd-services/SDReverse"
-REFUND_MONEY_SIGNATURE_FIELDS = ("sector", "id")
+from api.config import BASE_SITE_LINK
+from api.payments.utils.register_deal_methods import (
+    PAYGINE_ORDER_STATUS_NOTIFY_PATH,
+    build_payout_order_payment_values,
+    create_registered_payout_deal,
+)
+from api.schemas.schemas_v1 import (
+    RegisterDealPerformer,
+    RegisterPayoutDealPaymentResponse,
+    RegisterPayoutDealProviderRequest,
+    RefundMoneyPaymentRequest,
+)
 
 
 async def refund_registered_deal(
-    paygine_payment_operation_id: int,
-) -> dict[str, object]:
-    """Возвращаем средства заказчику в ПЦ и возвращаем отформатированный ответ."""
-    payload = build_refund_money_payload(paygine_payment_operation_id)
-    raw_response = await post_refund_money(payload)
-    return parse_paygine_response(raw_response)
-
-
-def build_refund_money_payload(
-    paygine_payment_operation_id: int,
-) -> dict[str, object]:
-    """Собираем form-urlencoded payload для SDReverse."""
-    payload = {
-        "sector": PAYGINE_SECTOR,
-        "id": paygine_payment_operation_id,
-    }
-    payload["signature"] = build_signature(
-        payload[field] for field in REFUND_MONEY_SIGNATURE_FIELDS
+    data: RefundMoneyPaymentRequest,
+) -> RegisterPayoutDealPaymentResponse:
+    """Регистрируем возврат заказчику в ПЦ без сервисной комиссии."""
+    refund_data = build_refund_money_payment_request(data)
+    provider_response = await create_registered_payout_deal(refund_data)
+    return RegisterPayoutDealPaymentResponse(
+        provider_response=provider_response,
+        payment_values=build_payout_order_payment_values(provider_response),
     )
-    return payload
 
 
-async def post_refund_money(payload: dict[str, object]) -> str:
-    """Выполняем асинхронный HTTP POST к SDReverse."""
-    client = get_paygine_client()
-    response = await client.post(
-        REFUND_MONEY_ENDPOINT,
-        data=payload,
-        headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
+def build_refund_money_payment_request(
+    data: RefundMoneyPaymentRequest,
+) -> RegisterPayoutDealProviderRequest:
+    """Собираем provider-контракт возврата на client_ref заказчика."""
+    return RegisterPayoutDealProviderRequest(
+        order_id=data.order_id,
+        performer=RegisterDealPerformer(
+            client_ref=str(data.client_id),
+            email=data.customer_email,
+            phone=data.customer_phone,
+        ),
+        amount=data.amount,
+        reference=f"gladeal-order-{data.order_id}-refund",
+        description=data.description,
+        notify_url=f"{BASE_SITE_LINK.rstrip('/')}{PAYGINE_ORDER_STATUS_NOTIFY_PATH}",
+        currency=data.currency,
     )
-    response.raise_for_status()
-    return response.text

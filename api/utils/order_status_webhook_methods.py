@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, PaymentInvalidProviderResponseError
+from api.payments.payments_methods import complete_paymented_deal
 from api.payments.utils.xml_response_parser import parse_paygine_response
 from api.utils.help_orders_method import (
     add_order_status_history,
@@ -21,7 +22,7 @@ from database.models.payments import OrderPaymentData
 
 
 ORDER_REFERENCE_PREFIX = "gladeal-order-"
-WebhookOperationType = Literal["payment", "payout"]
+WebhookOperationType = Literal["payment", "payout", "refund"]
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,8 @@ class WebhookOrderOperation:
     order_status: OrderStates | str | None
     payment_status: OrderPaymentStates | str | None
     payout_status: OrderPaymentStates | str | None
+    revoke_status: OrderPaymentStates | str | None
+    payment_operation_id: int | None
     operation_type: WebhookOperationType
 
 
@@ -68,7 +71,10 @@ async def update_order_payment_status_from_webhook(
             if operation.operation_type == "payment":
                 await set_webhook_payment_status(session, operation, order_state)
             elif order_state == OrderPaymentStates.COMPLETED.value:
-                await set_webhook_payout_completed(session, operation)
+                if operation.operation_type == "payout":
+                    await set_webhook_payout_completed(session, operation)
+                else:
+                    await set_webhook_refund_completed(session, operation)
 
 
 async def get_webhook_order_operation(
@@ -83,8 +89,10 @@ async def get_webhook_order_operation(
             OrderPaymentData.id,
             OrderPaymentData.payment_status,
             OrderPaymentData.payout_status,
+            OrderPaymentData.revoke_status,
             OrderPaymentData.paygine_payment_operation_id,
             OrderPaymentData.paygine_payout_operation_id,
+            OrderPaymentData.paygine_revoked_operation_id,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
         .where(Order.id == order_id)
@@ -99,8 +107,10 @@ async def get_webhook_order_operation(
         payment_data_id,
         payment_status,
         payout_status,
+        revoke_status,
         payment_operation_id,
         payout_operation_id,
+        revoked_operation_id,
     ) = row
     return WebhookOrderOperation(
         order_id=order_id,
@@ -108,9 +118,12 @@ async def get_webhook_order_operation(
         order_status=order_status,
         payment_status=payment_status,
         payout_status=payout_status,
+        revoke_status=revoke_status,
+        payment_operation_id=int(payment_operation_id) if payment_operation_id is not None else None,
         operation_type=get_webhook_order_operation_type(
             payment_operation_id,
             payout_operation_id,
+            revoked_operation_id,
             paygine_order_id,
             payload,
         ),
@@ -120,6 +133,7 @@ async def get_webhook_order_operation(
 def get_webhook_order_operation_type(
     payment_operation_id: str | None,
     payout_operation_id: str | None,
+    revoked_operation_id: str | None,
     paygine_order_id: str,
     payload: dict[str, object],
 ) -> WebhookOperationType:
@@ -127,6 +141,8 @@ def get_webhook_order_operation_type(
         return "payment"
     if payout_operation_id is not None and str(payout_operation_id) == paygine_order_id:
         return "payout"
+    if revoked_operation_id is not None and str(revoked_operation_id) == paygine_order_id:
+        return "refund"
     raise PaymentInvalidProviderResponseError(details=payload)
 
 
@@ -138,27 +154,49 @@ async def set_webhook_payment_status(
     if order_state == OrderPaymentStates.AUTHORIZED.value:
         await set_webhook_payment_authorized(session, operation)
     elif order_state == OrderPaymentStates.COMPLETED.value:
-        await session.execute(
-            update(OrderPaymentData)
-            .where(OrderPaymentData.id == operation.payment_data_id)
-            .values(payment_status=OrderPaymentStates.COMPLETED.value, updated_at=func.now())
-        )
+        await set_webhook_payment_completed(session, operation)
 
 
 async def set_webhook_payment_authorized(
     session: AsyncSession,
     operation: WebhookOrderOperation,
 ) -> None:
-    if payment_status_value(operation.payment_status) != OrderPaymentStates.COMPLETED.value:
+    if operation.payment_operation_id is None:
+        raise OrderNotFoundError()
+    current_payment_status = payment_status_value(operation.payment_status)
+    if current_payment_status not in {
+        OrderPaymentStates.AUTHORIZED.value,
+        OrderPaymentStates.COMPLETED.value,
+    }:
+        await complete_paymented_deal(operation.payment_operation_id)
+
+    if current_payment_status != OrderPaymentStates.COMPLETED.value:
         await session.execute(
             update(OrderPaymentData)
             .where(OrderPaymentData.id == operation.payment_data_id)
             .values(
                 payment_status=OrderPaymentStates.AUTHORIZED.value,
-                payment_complete_at=func.now(),
                 updated_at=func.now(),
             )
         )
+
+
+async def set_webhook_payment_completed(
+    session: AsyncSession,
+    operation: WebhookOrderOperation,
+) -> None:
+    is_new_payment_completion = (
+        payment_status_value(operation.payment_status) != OrderPaymentStates.COMPLETED.value
+    )
+    await session.execute(
+        update(OrderPaymentData)
+        .where(OrderPaymentData.id == operation.payment_data_id)
+        .values(
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payment_complete_at=func.now(),
+            updated_at=func.now(),
+        )
+    )
 
     current_status_value = order_status_value(operation.order_status)
     if current_status_value != OrderStates.AWAITING_PAYMENT.value:
@@ -169,13 +207,14 @@ async def set_webhook_payment_authorized(
         .where(Order.id == operation.order_id)
         .values(status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value)
     )
-    await add_order_status_history(
-        session,
-        operation.order_id,
-        current_status_value,
-        OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-        None,
-    )
+    if is_new_payment_completion:
+        await add_order_status_history(
+            session,
+            operation.order_id,
+            current_status_value,
+            OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+            None,
+        )
 
 
 async def set_webhook_payout_completed(
@@ -209,6 +248,21 @@ async def set_webhook_payout_completed(
         .values(
             payout_status=OrderPaymentStates.COMPLETED.value,
             payout_completed_at=func.now(),
+            updated_at=func.now(),
+        )
+    )
+
+
+async def set_webhook_refund_completed(
+    session: AsyncSession,
+    operation: WebhookOrderOperation,
+) -> None:
+    await session.execute(
+        update(OrderPaymentData)
+        .where(OrderPaymentData.id == operation.payment_data_id)
+        .values(
+            revoke_status=OrderPaymentStates.COMPLETED.value,
+            revoked_at=func.now(),
             updated_at=func.now(),
         )
     )

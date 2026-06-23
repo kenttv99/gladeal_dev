@@ -220,6 +220,18 @@ class RegisterDepositDealPaymentRequest(BaseModel):
     currency: int = 643
 
 
+class RefundMoneyPaymentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    order_id: int
+    client_id: int
+    customer_email: str
+    customer_phone: str | None = None
+    amount: Decimal
+    description: str
+    currency: int = 643
+
+
 class DepositDealPaymentValues(BaseModel):
     currency: int
     order_amount: Decimal
