@@ -10,6 +10,8 @@ app = FastAPI(
     title="GLADEAL Admin API",
     description="API для административных методов",
     version="1.0.0",
+    docs_url="/api/v1/admins/docs",
+    openapi_url="/api/v1/admins/openapi.json",
 )
 
 # CORS middleware
