@@ -253,6 +253,8 @@ Endpoint удаляет запись refresh token из `user_refresh_tokens` и
 
 - `POST /api/v1/client/deal_create` - регистрация депозитной сделки.
 - `POST /api/v1/client/deal_confirm` - завершение платежа и регистрация payout.
+- `GET /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата.
+- `GET /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout.
 - `POST /v1/paygine/webhook_order_status` - синхронизация статусов операций Paygine с БД.
 
 ## Статусы сделок

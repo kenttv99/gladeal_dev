@@ -5,8 +5,14 @@ from datetime import datetime
 from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import AdminRoles, OrderStates
-from api.exceptions import InvalidCredentialsError, OrderNotFoundError, ValidationError
+from api.enums.enums_v1 import AdminRoles, OrderPaymentStates, OrderStates
+from api.exceptions import (
+    InvalidCredentialsError,
+    OrderNotFoundError,
+    OrderPaymentInvalidStatusError,
+    ValidationError,
+)
+from api.payments.payments_methods import refund_money, register_payout_deal
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
     AdminOrderResponse,
@@ -15,6 +21,14 @@ from api.schemas.schemas_v1 import (
     AdminUserBanResponse,
     AdminUserResponse,
     AdminUsersResponse,
+    RefundMoneyPaymentRequest,
+    RegisterPayoutDealPaymentRequest,
+)
+from api.utils.help_orders_method import (
+    add_order_status_history,
+    ensure_order_payment_status,
+    ensure_order_status,
+    order_status_values,
 )
 from api.utils.admin_password_methods import (
     hash_admin_password,
@@ -23,6 +37,7 @@ from api.utils.admin_password_methods import (
 )
 from database.config import AsyncSessionLocal
 from database.models.orders import Order, OrderStatusHistory
+from database.models.payments import OrderPaymentData
 from database.models.users import Admin, User
 
 
@@ -258,6 +273,168 @@ async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
             for history in status_history
         ],
     )
+
+
+async def close_order_to_client(order_id: int) -> None:
+    """Закрываем спор в пользу заказчика и регистрируем возврат без комиссии."""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(
+                    Order.status,
+                    Order.client_id,
+                    Order.price,
+                    Order.title,
+                    OrderPaymentData.payment_status,
+                    OrderPaymentData.customer_email,
+                    OrderPaymentData.paygine_revoked_operation_id,
+                    OrderPaymentData.revoke_status,
+                    User.phone_number,
+                )
+                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+                .join(User, User.id == Order.client_id)
+                .where(Order.id == order_id)
+                .with_for_update(of=(Order, OrderPaymentData))
+            )
+            row = result.one_or_none()
+            if row is None:
+                raise OrderNotFoundError()
+
+            (
+                current_status,
+                client_id,
+                price,
+                title,
+                payment_status,
+                customer_email,
+                refund_operation_id,
+                revoke_status,
+                customer_phone,
+            ) = row
+            ensure_order_status(current_status, OrderStates.OPEN_CONFLICT)
+            ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+            ensure_no_active_payment_operation(refund_operation_id, revoke_status)
+
+            refund_result = await refund_money(
+                RefundMoneyPaymentRequest(
+                    order_id=order_id,
+                    client_id=client_id,
+                    customer_email=customer_email,
+                    customer_phone=customer_phone,
+                    amount=price,
+                    description=title,
+                )
+            )
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(**order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value))
+            )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
+                None,
+            )
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.order_id == order_id)
+                .values(
+                    paygine_revoked_operation_id=(
+                        refund_result.payment_values.paygine_payout_operation_id
+                    ),
+                    revoke_status=OrderPaymentStates.REGISTERED.value,
+                    updated_at=func.now(),
+                )
+            )
+
+
+async def close_order_to_performer(order_id: int) -> None:
+    """Закрываем спор в пользу исполнителя и регистрируем выплату без комиссии."""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(
+                    Order.status,
+                    Order.performer_id,
+                    Order.price,
+                    Order.title,
+                    OrderPaymentData.payment_status,
+                    OrderPaymentData.performer_email,
+                    OrderPaymentData.paygine_payout_operation_id,
+                    OrderPaymentData.payout_status,
+                    User.phone_number,
+                )
+                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+                .join(User, User.id == Order.performer_id)
+                .where(Order.id == order_id)
+                .with_for_update(of=(Order, OrderPaymentData))
+            )
+            row = result.one_or_none()
+            if row is None:
+                raise OrderNotFoundError()
+
+            (
+                current_status,
+                performer_id,
+                price,
+                title,
+                payment_status,
+                performer_email,
+                payout_operation_id,
+                payout_status,
+                performer_phone,
+            ) = row
+            ensure_order_status(current_status, OrderStates.OPEN_CONFLICT)
+            ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+            ensure_no_active_payment_operation(payout_operation_id, payout_status)
+            if performer_id is None or performer_phone is None or not performer_email:
+                raise ValidationError()
+
+            payout_result = await register_payout_deal(
+                RegisterPayoutDealPaymentRequest(
+                    order_id=order_id,
+                    performer_id=performer_id,
+                    performer_email=performer_email,
+                    performer_phone=performer_phone,
+                    amount=price,
+                    description=title,
+                )
+            )
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(**order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value))
+            )
+            await add_order_status_history(
+                session,
+                order_id,
+                current_status,
+                OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
+                None,
+            )
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.order_id == order_id)
+                .values(
+                    paygine_payout_operation_id=(
+                        payout_result.payment_values.paygine_payout_operation_id
+                    ),
+                    payout_status=OrderPaymentStates.REGISTERED.value,
+                    expire_payout_at=payout_result.payment_values.expire_payout_at,
+                    updated_at=func.now(),
+                )
+            )
+
+
+def ensure_no_active_payment_operation(
+    operation_id: str | None,
+    status: OrderPaymentStates | str | None,
+) -> None:
+    status_value = status.value if isinstance(status, OrderPaymentStates) else status
+    if operation_id is not None and status_value != OrderPaymentStates.COMPLETED.value:
+        raise OrderPaymentInvalidStatusError()
 
 
 async def set_user_ban_state(

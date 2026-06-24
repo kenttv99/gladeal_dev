@@ -13,6 +13,8 @@ from api.schemas.schemas_v1 import (
 )
 from api.utils.admins_methods import (
     authenticate_admin,
+    close_order_to_client,
+    close_order_to_performer,
     get_order_info as get_order_info_method,
     get_orders as get_orders_method,
     get_users as get_users_method,
@@ -75,12 +77,14 @@ async def get_balance() -> dict[str, object]:
     return await get_balance_method()
 
 @router.get("/close_to_client")
-async def close_to_client():
-    pass
+async def close_to_client(order_id: int = Query(..., ge=1)) -> dict[str, bool]:
+    await close_order_to_client(order_id)
+    return {"success": True}
 
 @router.get("/close_to_performer")
-async def close_to_performer():
-    pass
+async def close_to_performer(order_id: int = Query(..., ge=1)) -> dict[str, bool]:
+    await close_order_to_performer(order_id)
+    return {"success": True}
 
 
 @router.get("/ban_user")
