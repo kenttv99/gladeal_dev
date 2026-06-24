@@ -25,7 +25,7 @@ register_exception_handlers(app)
 
 app.include_router(
     admins_router,
-    prefix="/api/v1/admins",
+    prefix="/api/v1/admin",
     tags=["Admins"],
 )
 
