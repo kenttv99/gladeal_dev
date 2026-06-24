@@ -21,6 +21,11 @@ class UserNotFoundError(BaseAPIException):
     error_code = "USER_NOT_FOUND"
 
 
+class UserBannedError(BaseAPIException):
+    status_code = 403
+    error_code = "USER_BANNED"
+
+
 class PhoneNumberAlreadyExistsError(BaseAPIException):
     status_code = 409
     error_code = "PHONE_NUMBER_ALREADY_EXISTS"

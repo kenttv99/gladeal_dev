@@ -5,6 +5,7 @@ from api.enums.enums_v1 import OrderStates
 from api.exceptions import (
     AccountDeletionBlockedByActiveOrdersError,
     PhoneNumberAlreadyExistsError,
+    UserBannedError,
     UserNotFoundError,
 )
 from database.config import AsyncSessionLocal
@@ -101,6 +102,15 @@ async def authenticate_user(phone_number: str) -> int:
         if user_id is None:
             raise UserNotFoundError()
         return user_id
+
+
+async def ensure_user_not_banned(user_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        is_banned = await session.scalar(select(User.is_banned).where(User.id == user_id))
+        if is_banned is None:
+            raise UserNotFoundError()
+        if is_banned:
+            raise UserBannedError()
 
 
 async def reset_phone_number(user_id: int, phone_number: str) -> None:

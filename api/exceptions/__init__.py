@@ -1,6 +1,7 @@
 from api.exceptions.exceptions import (
     BaseAPIException,
     UserNotFoundError,
+    UserBannedError,
     PhoneNumberAlreadyExistsError,
     AccountDeletionBlockedByActiveOrdersError,
     MonthOrdersLimitExceededError,
@@ -24,6 +25,7 @@ from api.exceptions.handler import register_exception_handlers
 __all__ = [
     "BaseAPIException",
     "UserNotFoundError",
+    "UserBannedError",
     "PhoneNumberAlreadyExistsError",
     "AccountDeletionBlockedByActiveOrdersError",
     "MonthOrdersLimitExceededError",
