@@ -176,6 +176,29 @@ async def authorize_user(
     return request_user_id
 
 
+async def authorize_admin(
+    credentials: HTTPBasicCredentials | None = Security(auth_scheme),
+) -> int:
+    if credentials is None:
+        raise InvalidCredentialsError()
+
+    try:
+        request_admin_id = int(credentials.username)
+        payload = jwt.decode(credentials.password, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        token_admin_id = int(payload["admin_id"])
+    except ExpiredSignatureError as exc:
+        raise AccessTokenExpiredError() from exc
+    except InvalidTokenError as exc:
+        raise InvalidAccessTokenError() from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise InvalidAccessTokenError() from exc
+
+    if request_admin_id != token_admin_id:
+        raise AccessDeniedError()
+
+    return request_admin_id
+
+
 def ensure_authorized_user_id(request_user_id: int, authorized_user_id: int) -> None:
     if request_user_id != authorized_user_id:
         raise AccessDeniedError()
