@@ -104,6 +104,14 @@ async def authenticate_user(phone_number: str) -> int:
         return user_id
 
 
+async def get_user_phone_number(user_id: int) -> str:
+    async with AsyncSessionLocal() as session:
+        phone_number = await session.scalar(select(User.phone_number).where(User.id == user_id))
+        if phone_number is None:
+            raise UserNotFoundError()
+        return phone_number
+
+
 async def ensure_user_not_banned(user_id: int) -> None:
     async with AsyncSessionLocal() as session:
         is_banned = await session.scalar(select(User.is_banned).where(User.id == user_id))

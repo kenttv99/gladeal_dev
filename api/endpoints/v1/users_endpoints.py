@@ -5,6 +5,11 @@ from api.schemas.schemas_v1 import (
     AuthUserResponse,
     RegisterUserRequest,
 )
+from api.sms_calls.sms_calls_methods import (
+    send_user_call_code,
+    send_user_sms_code,
+    verify_user_sms_call_code,
+)
 from api.utils.jwt_methods import (
     authorize_user,
     create_refresh_token,
@@ -15,6 +20,7 @@ from api.utils.jwt_methods import (
 from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
+    get_user_phone_number,
     register_user,
     reset_phone_number as reset_phone_number_method,
 )
@@ -60,6 +66,36 @@ async def access_token_refresh(
 async def logout(refresh_token: str = Body(..., embed=True)) -> dict[str, bool]:
     await revoke_refresh_token(refresh_token)
     return {"success": True}
+
+
+@router.post("/verification-code/sms")
+async def send_sms_verification_code(
+    phone_number: str | None = Body(None, embed=True),
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, object]:
+    return await send_user_sms_code(
+        authorized_user_id,
+        phone_number or await get_user_phone_number(authorized_user_id),
+    )
+
+
+@router.post("/verification-code/call")
+async def send_call_verification_code(
+    phone_number: str | None = Body(None, embed=True),
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, object]:
+    return await send_user_call_code(
+        authorized_user_id,
+        phone_number or await get_user_phone_number(authorized_user_id),
+    )
+
+
+@router.post("/verification-code/verify")
+async def verify_sms_call_code(
+    code: str = Body(..., embed=True),
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    return {"success": await verify_user_sms_call_code(authorized_user_id, code)}
 
 
 @router.post("/reset-phone-number")

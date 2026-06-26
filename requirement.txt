@@ -9,3 +9,4 @@ psycopg2-binary
 asyncpg
 argon2-cffi
 httpx
+redis
