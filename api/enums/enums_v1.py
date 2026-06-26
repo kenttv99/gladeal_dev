@@ -45,6 +45,17 @@ class AdminRoles(Enum):
     SUPPORT = "support"
 
 
+class VerificationScopes(Enum):
+    REGISTER = "register"
+    LOGIN = "login"
+    RESET_PHONE_NUMBER = "reset_phone_number"
+
+
+class VerificationMethods(Enum):
+    SMS = "sms"
+    CALL = "call"
+
+
 class OrderPaymentStates(Enum):
     REGISTERED = "registered"
     AUTHORIZED = "authorized"

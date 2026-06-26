@@ -127,12 +127,13 @@ async def refresh_access_token(refresh_token: str) -> str:
     return generate_access_token(await decode_refresh_token(refresh_token))
 
 
-async def revoke_refresh_token(refresh_token: str) -> None:
+async def revoke_refresh_token(user_id: int, refresh_token: str) -> None:
     async with AsyncSessionLocal() as session:
         async with session.begin():
             token = await session.scalar(
                 select(UserRefreshToken).where(
-                    UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token)
+                    UserRefreshToken.user_id == user_id,
+                    UserRefreshToken.token_hash == get_refresh_token_hash(refresh_token),
                 )
             )
             if token is None:

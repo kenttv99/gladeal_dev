@@ -112,6 +112,16 @@ async def get_user_phone_number(user_id: int) -> str:
         return phone_number
 
 
+async def ensure_phone_number_available(phone_number: str, user_id: int | None = None) -> None:
+    async with AsyncSessionLocal() as session:
+        conditions = [User.phone_number == phone_number]
+        if user_id is not None:
+            conditions.append(User.id != user_id)
+        phone_number_owner_id = await session.scalar(select(User.id).where(*conditions))
+        if phone_number_owner_id is not None:
+            raise PhoneNumberAlreadyExistsError()
+
+
 async def ensure_user_not_banned(user_id: int) -> None:
     async with AsyncSessionLocal() as session:
         is_banned = await session.scalar(select(User.is_banned).where(User.id == user_id))

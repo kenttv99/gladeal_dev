@@ -3,7 +3,12 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from api.enums.enums_v1 import OrderStates, UserRoles
+from api.enums.enums_v1 import (
+    OrderStates,
+    UserRoles,
+    VerificationMethods,
+    VerificationScopes,
+)
 
 
 ###
@@ -15,6 +20,26 @@ class RegisterUserRequest(BaseModel):
     last_name: str
     phone_number: str
     ppd: bool = False
+
+
+class LoginUserRequest(BaseModel):
+    phone_number: str
+
+
+class ResetPhoneNumberRequest(BaseModel):
+    phone_number: str
+
+
+class PhoneVerificationCodeRequest(BaseModel):
+    phone_number: str
+    verification_scope: VerificationScopes
+    verification_method: VerificationMethods = VerificationMethods.SMS
+
+
+class PhoneVerificationCodeVerifyRequest(BaseModel):
+    phone_number: str
+    verification_code: str
+    verification_scope: VerificationScopes
 
 
 class AuthUserResponse(BaseModel):

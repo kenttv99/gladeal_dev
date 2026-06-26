@@ -12,7 +12,10 @@ from api.sms_calls.utils.code_generator import generate_verification_code
 from api.sms_calls.utils.phone_methods import normalize_phone_to_int
 from api.sms_calls.utils.sms_methods import build_prosto_sms_payload
 from api.sms_calls.utils.verification_code_storage_methods import (
+    build_phone_verification_code_key,
+    build_phone_verified_key,
     build_user_verification_code_key,
+    build_user_verified_key,
 )
 
 
@@ -49,7 +52,20 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
     def test_build_user_verification_code_key(self):
         self.assertEqual(
             build_user_verification_code_key(15),
-            "sms_calls:verification_code:user:15",
+            "sms_calls:verification_code:login:user:15",
+        )
+
+    def test_build_phone_verification_code_key(self):
+        self.assertEqual(
+            build_phone_verification_code_key(79000000001),
+            "sms_calls:verification_code:register:phone:79000000001",
+        )
+
+    def test_build_verified_keys(self):
+        self.assertEqual(build_user_verified_key(15), "sms_calls:verified:login:user:15")
+        self.assertEqual(
+            build_phone_verified_key(79000000001),
+            "sms_calls:verified:register:phone:79000000001",
         )
 
     def test_normalize_phone_to_int(self):
@@ -72,7 +88,7 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
         ):
             response = await send_user_sms_code(10, "+7 (900) 000-00-01")
 
-        save_code.assert_awaited_once_with(10, "1234")
+        save_code.assert_awaited_once_with(10, "1234", "login")
         send_code.assert_awaited_once_with(79000000001, "1234")
         self.assertEqual(response, {"success": True, "provider_response": {"response": "ok"}})
         self.assertNotIn("code", response)
