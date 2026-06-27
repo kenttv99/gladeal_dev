@@ -6,6 +6,7 @@ from api.sms_calls.config import (
     PROSTO_SMS_SENDER_NAME,
 )
 from api.sms_calls.http_client import get_prosto_sms_client
+from api.sms_calls.utils.provider_response_methods import validate_prosto_sms_response
 
 
 PROSTO_SMS_METHOD = "push_msg"
@@ -34,4 +35,4 @@ async def send_prosto_sms_code(phone: int, code: str) -> dict[str, object]:
         headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
     )
     response.raise_for_status()
-    return response.json()
+    return validate_prosto_sms_response(response.json())

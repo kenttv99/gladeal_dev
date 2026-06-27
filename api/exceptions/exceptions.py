@@ -113,3 +113,12 @@ class PaymentInvalidProviderSignatureError(BaseAPIException):
 class OrderPaymentInvalidStatusError(BaseAPIException):
     status_code = 409
     error_code = "ORDER_PAYMENT_INVALID_STATUS"
+
+
+###
+# Исключения SMS/звонков
+###
+
+class SmsCallsProviderError(BaseAPIException):
+    status_code = 502
+    error_code = "SMS_CALLS_PROVIDER_ERROR"

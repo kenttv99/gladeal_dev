@@ -6,10 +6,12 @@ environ.setdefault("SMS_CALLS_REDIS_URL", "redis://localhost:6379/0")
 environ.setdefault("SMS_CALLS_CODE_TTL_SECONDS", "300")
 
 from api.sms_calls.config import PROSTO_SMS_API_KEY
+from api.exceptions import SmsCallsProviderError
 from api.sms_calls.sms_calls_methods import send_user_sms_code
 from api.sms_calls.utils.calls_methods import build_prosto_call_payload
 from api.sms_calls.utils.code_generator import generate_verification_code
 from api.sms_calls.utils.phone_methods import normalize_phone_to_int
+from api.sms_calls.utils.provider_response_methods import validate_prosto_sms_response
 from api.sms_calls.utils.sms_methods import build_prosto_sms_payload
 from api.sms_calls.utils.verification_code_storage_methods import (
     build_phone_verification_code_key,
@@ -92,6 +94,49 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
         send_code.assert_awaited_once_with(79000000001, "1234")
         self.assertEqual(response, {"success": True, "provider_response": {"response": "ok"}})
         self.assertNotIn("code", response)
+
+    def test_validate_prosto_sms_response_raises_provider_error(self):
+        provider_response = {
+            "response": {
+                "msg": {
+                    "err_code": "628",
+                    "text": "Отправка разрешена только на привязанный номер.",
+                    "type": "error",
+                },
+                "data": None,
+            }
+        }
+
+        with self.assertRaises(SmsCallsProviderError) as context:
+            validate_prosto_sms_response(provider_response)
+
+        self.assertEqual(context.exception.details, provider_response)
+
+    async def test_send_user_sms_code_deletes_saved_code_on_provider_error(self):
+        provider_error = SmsCallsProviderError(details={"response": {"msg": {"err_code": "628"}}})
+        with (
+            patch(
+                "api.sms_calls.sms_calls_methods.generate_verification_code",
+                return_value="1234",
+            ),
+            patch(
+                "api.sms_calls.sms_calls_methods.save_user_verification_code",
+                new=AsyncMock(),
+            ) as save_code,
+            patch(
+                "api.sms_calls.sms_calls_methods.delete_user_verification_code",
+                new=AsyncMock(),
+            ) as delete_code,
+            patch(
+                "api.sms_calls.sms_calls_methods.send_prosto_sms_code",
+                new=AsyncMock(side_effect=provider_error),
+            ),
+        ):
+            with self.assertRaises(SmsCallsProviderError):
+                await send_user_sms_code(10, "+7 (900) 000-00-01")
+
+        save_code.assert_awaited_once_with(10, "1234", "login")
+        delete_code.assert_awaited_once_with(10, "login")
 
 
 if __name__ == "__main__":
