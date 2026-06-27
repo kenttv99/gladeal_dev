@@ -57,6 +57,16 @@ async def register(user: RegisterUserRequest):
         ppd=user.ppd,
     )
 
+@router.post("/register/without_sms")
+async def register_without_sms(user: RegisterUserRequest):
+    '''Запасной ендпоинт для регистрации без смс'''
+    return await register_user(
+        first_name=user.first_name,
+        last_name=user.last_name,
+        phone_number=user.phone_number,
+        ppd=user.ppd,
+    )
+
 
 @router.post("/delete-account")
 async def delete_account(
@@ -72,6 +82,17 @@ async def auth(data: LoginUserRequest) -> AuthUserResponse | dict[str, bool]:
     if not await consume_user_sms_call_verification(user_id, VerificationScopes.LOGIN.value):
         return {"success": False}
 
+    refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
+    return AuthUserResponse(
+        access_token=generate_access_token(user_id),
+        refresh_token=refresh_token,
+        refresh_token_expires_at=refresh_token_expires_at,
+    )
+
+@router.post("/login/without_sms")
+async def auth_without_sms(data: LoginUserRequest) -> AuthUserResponse | dict[str, bool]:
+    '''Запасной ендпоинт для авторизации без смс'''
+    user_id = await authenticate_user(data.phone_number)
     refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
     return AuthUserResponse(
         access_token=generate_access_token(user_id),
@@ -110,6 +131,15 @@ async def reset_phone_number(
     ):
         return {"success": False}
 
+    await reset_phone_number_method(authorized_user_id, data.phone_number)
+    return {"success": True}
+
+@router.post("/reset-phone-number/without_sms")
+async def reset_phone_number(
+    data: ResetPhoneNumberRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    '''Запасной ендпоинт для смены номера телефона'''
     await reset_phone_number_method(authorized_user_id, data.phone_number)
     return {"success": True}
 
