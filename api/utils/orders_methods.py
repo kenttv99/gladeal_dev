@@ -46,6 +46,7 @@ from api.utils.help_orders_method import (
     set_client_confirmed_order_status,
     set_performer_declined_order_status,
     set_softdeclined_order_status,
+    UNPAID_ORDER_STATUSES,
 )
 from database.config import AsyncSessionLocal
 from database.models.orders import Order
@@ -386,7 +387,7 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                 order_id,
                 performer_id,
             )
-            if order_status_value(refund_data.current_status) == OrderStates.AWAITING_PAYMENT.value:
+            if order_status_value(refund_data.current_status) in UNPAID_ORDER_STATUSES:
                 if payment_operation_id is None:
                     raise OrderNotFoundError()
                 await cancle_unpayment_deal(payment_operation_id)

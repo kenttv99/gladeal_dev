@@ -135,7 +135,7 @@ async def reset_phone_number(
     return {"success": True}
 
 @router.post("/reset-phone-number/without_sms")
-async def reset_phone_number(
+async def reset_phone_number_without_sms(
     data: ResetPhoneNumberRequest,
     authorized_user_id: int = Depends(authorize_user),
 ) -> dict[str, bool]:

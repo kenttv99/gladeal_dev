@@ -41,8 +41,11 @@ CLOSED_ORDER_STATUSES = (
     OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
 )
 PERFORMER_DECLINE_ORDER_STATUSES = (
+    *ACTIVE_ORDER_STATUSES,
+)
+UNPAID_ORDER_STATUSES = (
+    OrderStates.AWAITING_PERFORMER.value,
     OrderStates.AWAITING_PAYMENT.value,
-    OrderStates.AWAITING_CONFLICT.value,
 )
 
 
@@ -379,7 +382,7 @@ async def get_performer_decline_refund_data(
     ensure_order_status(current_status, PERFORMER_DECLINE_ORDER_STATUSES)
     if payment_operation_id is None:
         raise OrderNotFoundError()
-    if order_status_value(current_status) == OrderStates.AWAITING_PAYMENT.value:
+    if order_status_value(current_status) in UNPAID_ORDER_STATUSES:
         ensure_registered_order_payment_status(payment_status)
         return int(payment_operation_id), RefundMoneyOrderData(
             current_status=current_status,

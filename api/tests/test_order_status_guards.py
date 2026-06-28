@@ -8,6 +8,7 @@ from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import ValidationError
 from api.utils import orders_methods
 from api.utils.help_orders_method import (
+    get_performer_decline_refund_data,
     set_performer_declined_order_status,
     set_softdeclined_order_status,
 )
@@ -170,6 +171,83 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             3,
             "20",
         )
+
+    async def test_performer_decline_from_active_paid_status(self):
+        session = FakeSession()
+        with (
+            patch.object(orders_methods, "AsyncSessionLocal", return_value=session),
+            patch.object(
+                orders_methods,
+                "get_performer_decline_refund_data",
+                new=AsyncMock(
+                    return_value=(
+                        None,
+                        SimpleNamespace(
+                            current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+                            client_id=2,
+                            customer_email="client@example.com",
+                            customer_phone="+79990000000",
+                            price=100,
+                            title="Order",
+                        ),
+                    )
+                ),
+            ),
+            patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
+            patch.object(
+                orders_methods,
+                "refund_money",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        payment_values=SimpleNamespace(paygine_payout_operation_id="20")
+                    )
+                ),
+            ) as refund,
+            patch.object(
+                orders_methods,
+                "set_performer_declined_order_status",
+                new=AsyncMock(),
+            ) as set_status,
+        ):
+            await orders_methods.performer_decline_order(1, 3)
+
+        cancel.assert_not_awaited()
+        refund.assert_awaited_once()
+        set_status.assert_awaited_once_with(
+            session,
+            1,
+            OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            3,
+            "20",
+        )
+
+    async def test_performer_decline_data_allows_active_paid_status(self):
+        session = FakeSession(
+            execute_results=[
+                FakeResult(
+                    (
+                        OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+                        2,
+                        100,
+                        "Order",
+                        "10",
+                        OrderPaymentStates.COMPLETED.value,
+                        "client@example.com",
+                        "+79990000000",
+                    )
+                )
+            ],
+            scalar_results=[True],
+        )
+
+        payment_operation_id, refund_data = await get_performer_decline_refund_data(
+            session,
+            1,
+            3,
+        )
+
+        self.assertIsNone(payment_operation_id)
+        self.assertEqual(refund_data.current_status, OrderStates.AWAITING_CLIENT_CONFIRMATION.value)
 
     async def test_client_harddecline_from_allowed_statuses(self):
         for status in (
