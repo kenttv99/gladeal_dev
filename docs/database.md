@@ -131,7 +131,7 @@ Refresh token-ы администраторов.
 Особенности:
 
 - `client_id` и `performer_id` ссылаются на `users.id`.
-- `status` использует `OrderStates`, включая `awaiting_performer_payout`.
+- `status` использует `OrderStates`, включая `awaiting_performer_payout` и `awaiting_client_payout`.
 - `checked_by_worker_at` и `expire_in` используются воркером истечения сделок.
 - `completed_at` заполняется при переходе в `awaiting_client_confirmation` и в закрытые статусы.
 - `slug` уникален и используется для ссылок на экран сделки.
@@ -238,7 +238,7 @@ Enum-поля хранятся как `VARCHAR + CHECK constraint`, без Postg
 
 - `UserRoles`: `client`, `performer`
 - `AdminRoles`: `superuser`, `admin`, `support`
-- `OrderStates`: статусы сделок, включая `awaiting_performer_payout`
+- `OrderStates`: статусы сделок, включая `awaiting_performer_payout` и `awaiting_client_payout`
 - `OrderPaymentStates`: `registered`, `authorized`, `completed`, `blocked`, `canceled`, `expired`
 - `NotificationTypes`: `order`, `review`, `promotion`, `news`
 - `NotificationStatuses`: `unread`, `read`, `archived`, `failed`

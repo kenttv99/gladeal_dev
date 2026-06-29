@@ -38,11 +38,13 @@ from api.utils.help_orders_method import (
     ensure_user_exists,
     generate_order_link,
     get_client_confirm_payment_data,
+    get_client_softdecline_refund_data,
     get_order_info_payment_data,
     get_performer_decline_refund_data,
     get_softdecline_payment_operation_id,
     order_status_value,
     order_status_values,
+    set_client_refund_order_status,
     set_client_confirmed_order_status,
     set_performer_declined_order_status,
     set_softdeclined_order_status,
@@ -398,6 +400,8 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                     performer_id,
                 )
                 return
+            if order_status_value(refund_data.current_status) == OrderStates.AWAITING_CLIENT_PAYOUT.value:
+                return
             refund_result = await refund_money(
                 RefundMoneyPaymentRequest(
                     order_id=order_id,
@@ -418,16 +422,47 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
 
 
 async def client_softdecline_order(order_id: int, client_id: int) -> None:
-    """Переводим сделку в неуспешное завершение, если исполнитель еще не принял ее"""
+    """Отказываем сделку заказчиком до передачи результата исполнителем."""
     async with AsyncSessionLocal() as session:
         async with session.begin():
-            payment_operation_id, current_status = await get_softdecline_payment_operation_id(
+            try:
+                payment_operation_id, current_status = await get_softdecline_payment_operation_id(
+                    session,
+                    order_id,
+                    client_id,
+                )
+            except ValidationError:
+                refund_data = await get_client_softdecline_refund_data(session, order_id, client_id)
+                if (
+                    order_status_value(refund_data.current_status)
+                    == OrderStates.AWAITING_CLIENT_PAYOUT.value
+                ):
+                    return
+                refund_result = await refund_money(
+                    RefundMoneyPaymentRequest(
+                        order_id=order_id,
+                        client_id=refund_data.client_id,
+                        customer_email=refund_data.customer_email,
+                        customer_phone=refund_data.customer_phone,
+                        amount=refund_data.price,
+                        description=refund_data.title,
+                    )
+                )
+                await set_client_refund_order_status(
+                    session,
+                    order_id,
+                    refund_data.current_status,
+                    client_id,
+                    refund_result.payment_values.paygine_payout_operation_id,
+                )
+                return
+            await cancle_unpayment_deal(payment_operation_id)
+            await set_softdeclined_order_status(
                 session,
                 order_id,
+                current_status,
                 client_id,
             )
-            await cancle_unpayment_deal(payment_operation_id)
-            await set_softdeclined_order_status(session, order_id, current_status, client_id)
 
 
 async def client_harddecline_order(order_id: int, client_id: int) -> None:

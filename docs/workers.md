@@ -60,7 +60,7 @@
 Если `expire_in <= текущее время`, воркер:
 
 - регистрирует возврат через `refund_money(...)` с `client_ref` заказчика;
-- переводит сделку в `cancled_by_expire_time_to_client`;
+- переводит сделку в `awaiting_client_payout`;
 - сохраняет `paygine_revoked_operation_id` и `revoke_status = registered`.
 
 Сделки в статусе `awaiting_client_confirmation` проверяются по полю `completed_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES`.

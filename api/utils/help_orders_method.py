@@ -31,6 +31,7 @@ ACTIVE_ORDER_STATUSES = (
     OrderStates.AWAITING_CONFLICT.value,
     OrderStates.OPEN_CONFLICT.value,
     OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+    OrderStates.AWAITING_CLIENT_PAYOUT.value,
 )
 CLOSED_ORDER_STATUSES = (
     OrderStates.SUCCESSFUL_COMPLETION.value,
@@ -62,6 +63,16 @@ class ClientConfirmPaymentData:
 
 @dataclass(frozen=True)
 class RefundMoneyOrderData:
+    current_status: OrderStates | str | None
+    client_id: int
+    customer_email: str
+    customer_phone: str
+    price: Decimal
+    title: str
+
+
+@dataclass(frozen=True)
+class SoftdeclineOrderData:
     current_status: OrderStates | str | None
     client_id: int
     customer_email: str
@@ -414,13 +425,13 @@ async def set_performer_declined_order_status(
     await session.execute(
         update(Order)
         .where(Order.id == order_id)
-        .values(**order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
+        .values(**order_status_values(OrderStates.AWAITING_CLIENT_PAYOUT.value))
     )
     await add_order_status_history(
         session,
         order_id,
         current_status,
-        OrderStates.UNSUCCESSFUL_COMPLETION.value,
+        OrderStates.AWAITING_CLIENT_PAYOUT.value,
         performer_id,
     )
     await session.execute(
@@ -472,6 +483,92 @@ async def get_softdecline_payment_operation_id(
         raise OrderNotFoundError()
     ensure_registered_order_payment_status(payment_status)
     return int(payment_operation_id), current_status
+
+
+async def get_client_softdecline_refund_data(
+    session: AsyncSession,
+    order_id: int,
+    client_id: int,
+) -> SoftdeclineOrderData:
+    await ensure_user_exists(session, client_id)
+    result = await session.execute(
+        select(
+            Order.status,
+            Order.client_id,
+            Order.price,
+            Order.title,
+            OrderPaymentData.paygine_payment_operation_id,
+            OrderPaymentData.payment_status,
+            OrderPaymentData.customer_email,
+            User.phone_number,
+        )
+        .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .join(User, User.id == Order.client_id)
+        .where(Order.id == order_id, Order.client_id == client_id)
+        .with_for_update(of=(Order, OrderPaymentData))
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise OrderNotFoundError()
+
+    (
+        current_status,
+        order_client_id,
+        price,
+        title,
+        payment_operation_id,
+        payment_status,
+        customer_email,
+        customer_phone,
+    ) = row
+    ensure_order_status(
+        current_status,
+        (
+            OrderStates.AWAITING_PERFORMER_CONFIRMATION,
+            OrderStates.AWAITING_CLIENT_PAYOUT,
+        ),
+    )
+    if payment_operation_id is None:
+        raise OrderNotFoundError()
+    ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+    return SoftdeclineOrderData(
+        current_status=current_status,
+        client_id=order_client_id,
+        customer_email=customer_email,
+        customer_phone=customer_phone,
+        price=price,
+        title=title,
+    )
+
+
+async def set_client_refund_order_status(
+    session: AsyncSession,
+    order_id: int,
+    current_status: OrderStates | str | None,
+    client_id: int | None,
+    refund_operation_id: str,
+) -> None:
+    await session.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(**order_status_values(OrderStates.AWAITING_CLIENT_PAYOUT.value))
+    )
+    await add_order_status_history(
+        session,
+        order_id,
+        current_status,
+        OrderStates.AWAITING_CLIENT_PAYOUT.value,
+        client_id,
+    )
+    await session.execute(
+        update(OrderPaymentData)
+        .where(OrderPaymentData.order_id == order_id)
+        .values(
+            revoke_status=OrderPaymentStates.REGISTERED.value,
+            paygine_revoked_operation_id=refund_operation_id,
+            updated_at=func.now(),
+        )
+    )
 
 
 async def set_softdeclined_order_status(

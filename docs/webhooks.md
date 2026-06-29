@@ -65,13 +65,13 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 
 Для refund-операции:
 
-- `COMPLETED` - `orders_payment_data.revoke_status = completed`, `revoked_at = now()`.
+- `COMPLETED` - `orders_payment_data.revoke_status = completed`, `revoked_at = now()`, сделка переводится из `awaiting_client_payout` в `unsuccessful_completion`, запись добавляется в `order_status_history`.
 
 Статус сделки при `COMPLETED` payout выбирается по текущему бизнес-исходу:
 
 - обычная выплата исполнителю из `awaiting_performer_payout` переводит сделку в `successful_completion`;
 - выплата по просрочке сохраняет `confirm_by_expire_time_to_performer`;
-- возврат по просрочке сохраняет `cancled_by_expire_time_to_client`.
+- возврат после успешного вывода заказчиком переводит сделку в `unsuccessful_completion`.
 
 Другие допустимые значения `OrderPaymentStates` сейчас проходят через парсер и возвращаются в ответе, но отдельной бизнес-логики для них нет.
 

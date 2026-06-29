@@ -257,15 +257,37 @@ async def set_webhook_refund_completed(
     session: AsyncSession,
     operation: WebhookOrderOperation,
 ) -> None:
-    await session.execute(
-        update(OrderPaymentData)
-        .where(OrderPaymentData.id == operation.payment_data_id)
-        .values(
-            revoke_status=OrderPaymentStates.COMPLETED.value,
-            revoked_at=func.now(),
-            updated_at=func.now(),
-        )
+    current_status = order_status_value(operation.order_status)
+    new_status = get_webhook_refund_completed_order_status(current_status)
+    is_new_refund_completion = (
+        payment_status_value(operation.revoke_status) != OrderPaymentStates.COMPLETED.value
     )
+
+    if current_status != new_status:
+        await session.execute(
+            update(Order)
+            .where(Order.id == operation.order_id)
+            .values(**order_status_values(new_status))
+        )
+    if is_new_refund_completion:
+        await add_order_status_history(
+            session,
+            operation.order_id,
+            current_status,
+            new_status,
+            None,
+        )
+
+    if is_new_refund_completion:
+        await session.execute(
+            update(OrderPaymentData)
+            .where(OrderPaymentData.id == operation.payment_data_id)
+            .values(
+                revoke_status=OrderPaymentStates.COMPLETED.value,
+                revoked_at=func.now(),
+                updated_at=func.now(),
+            )
+        )
 
 
 def get_webhook_payout_completed_order_status(
@@ -278,6 +300,15 @@ def get_webhook_payout_completed_order_status(
     }:
         return status
     return OrderStates.SUCCESSFUL_COMPLETION.value
+
+
+def get_webhook_refund_completed_order_status(
+    current_status: OrderStates | str | None,
+) -> str:
+    status = order_status_value(current_status)
+    if status == OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value:
+        return status
+    return OrderStates.UNSUCCESSFUL_COMPLETION.value
 
 
 def _webhook_data(payload: dict[str, object]) -> dict[str, object]:

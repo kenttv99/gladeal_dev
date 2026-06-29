@@ -21,6 +21,7 @@ from api.utils.help_orders_method import (
     ensure_order_payment_status,
     order_status_value,
     order_status_values,
+    set_client_refund_order_status,
 )
 from database.models.orders import Order
 from database.models.payments import OrderPaymentData
@@ -151,7 +152,6 @@ async def expire_cancled_order(session: AsyncSession, order_id: int) -> None:
             session,
             order_id,
             order_data.current_status,
-            OrderStates.CANCLED_BY_EXPIRE_TIME.value,
             refund_result.payment_values.paygine_payout_operation_id,
         )
 
@@ -286,23 +286,14 @@ async def set_expired_order_refund_status(
     session: AsyncSession,
     order_id: int,
     current_status: OrderStates | str | None,
-    new_order_status: str,
     refund_operation_id: str,
 ) -> None:
-    await session.execute(
-        update(Order)
-        .where(Order.id == order_id)
-        .values(**order_status_values(new_order_status))
-    )
-    await add_order_status_history(session, order_id, current_status, new_order_status, None)
-    await session.execute(
-        update(OrderPaymentData)
-        .where(OrderPaymentData.order_id == order_id)
-        .values(
-            revoke_status=OrderPaymentStates.REGISTERED.value,
-            paygine_revoked_operation_id=refund_operation_id,
-            updated_at=func.now(),
-        )
+    await set_client_refund_order_status(
+        session,
+        order_id,
+        current_status,
+        None,
+        refund_operation_id,
     )
 
 
