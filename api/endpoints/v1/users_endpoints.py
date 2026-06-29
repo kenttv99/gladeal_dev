@@ -40,6 +40,18 @@ router = APIRouter()
 
 
 RESET_PHONE_NUMBER_VERIFICATION_SCOPE = VerificationScopes.RESET_PHONE_NUMBER.value
+PHONE_VERIFICATION_SCOPES = {
+    VerificationScopes.REGISTER: VerificationScopes.REGISTER.value,
+    VerificationScopes.RESET_PHONE_NUMBER: RESET_PHONE_NUMBER_VERIFICATION_SCOPE,
+}
+USER_CODE_SENDERS = {
+    VerificationMethods.CALL: send_user_call_code,
+    VerificationMethods.SMS: send_user_sms_code,
+}
+PHONE_CODE_SENDERS = {
+    VerificationMethods.CALL: send_phone_call_code,
+    VerificationMethods.SMS: send_phone_sms_code,
+}
 
 
 @router.post("/register")
@@ -150,23 +162,17 @@ async def send_verification_code(
 ) -> dict[str, object]:
     if data.verification_scope == VerificationScopes.LOGIN:
         user_id = await authenticate_user(data.phone_number)
-        if data.verification_method == VerificationMethods.CALL:
-            return await send_user_call_code(user_id, data.phone_number, VerificationScopes.LOGIN.value)
-        return await send_user_sms_code(user_id, data.phone_number, VerificationScopes.LOGIN.value)
-
-    if data.verification_scope == VerificationScopes.REGISTER:
-        await ensure_phone_number_available(data.phone_number)
-        if data.verification_method == VerificationMethods.CALL:
-            return await send_phone_call_code(data.phone_number, VerificationScopes.REGISTER.value)
-        return await send_phone_sms_code(data.phone_number, VerificationScopes.REGISTER.value)
+        return await USER_CODE_SENDERS[data.verification_method](
+            user_id,
+            data.phone_number,
+            VerificationScopes.LOGIN.value,
+        )
 
     await ensure_phone_number_available(data.phone_number)
-    if data.verification_method == VerificationMethods.CALL:
-        return await send_phone_call_code(
-            data.phone_number,
-            RESET_PHONE_NUMBER_VERIFICATION_SCOPE,
-        )
-    return await send_phone_sms_code(data.phone_number, RESET_PHONE_NUMBER_VERIFICATION_SCOPE)
+    return await PHONE_CODE_SENDERS[data.verification_method](
+        data.phone_number,
+        PHONE_VERIFICATION_SCOPES[data.verification_scope],
+    )
 
 
 @router.post("/verification-code/verify")
@@ -183,21 +189,11 @@ async def verify_verification_code(
             )
         }
 
-    if data.verification_scope == VerificationScopes.REGISTER:
-        await ensure_phone_number_available(data.phone_number)
-        return {
-            "success": await verify_phone_sms_call_code(
-                data.phone_number,
-                data.verification_code,
-                VerificationScopes.REGISTER.value,
-            )
-        }
-
     await ensure_phone_number_available(data.phone_number)
     return {
         "success": await verify_phone_sms_call_code(
             data.phone_number,
             data.verification_code,
-            RESET_PHONE_NUMBER_VERIFICATION_SCOPE,
+            PHONE_VERIFICATION_SCOPES[data.verification_scope],
         )
     }
