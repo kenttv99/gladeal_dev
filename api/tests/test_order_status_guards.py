@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
-from api.exceptions import ValidationError
+from api.exceptions import PaymentInvalidProviderSignatureError, ValidationError
+from api.payments.auth_methods import build_signature
 from api.utils import orders_methods
 from api.utils.help_orders_method import (
     get_performer_decline_refund_data,
@@ -15,6 +16,7 @@ from api.utils.help_orders_method import (
 )
 from api.utils.order_status_webhook_methods import (
     WebhookOrderOperation,
+    read_order_status_webhook_payload,
     set_webhook_refund_completed,
 )
 
@@ -53,8 +55,46 @@ class FakeSession:
         return self.scalar_results.pop(0)
 
 
+class FakeRequest:
+    def __init__(self, body: str):
+        self._body = body.encode("utf-8")
+
+    async def body(self):
+        return self._body
+
+
 def compiled_params(statement):
     return statement.compile().params
+
+
+def webhook_body(signature: str | None) -> str:
+    signature_node = f"<signature>{signature}</signature>" if signature is not None else ""
+    return (
+        "<order>"
+        "<order_id>100</order_id>"
+        "<reference>gladeal-order-1</reference>"
+        "<order_state>AUTHORIZED</order_state>"
+        f"{signature_node}"
+        "</order>"
+    )
+
+
+class OrderStatusWebhookSignatureTest(unittest.IsolatedAsyncioTestCase):
+    async def test_webhook_accepts_valid_signature(self):
+        signature = build_signature(("100", "gladeal-order-1", "AUTHORIZED"))
+
+        payload = await read_order_status_webhook_payload(FakeRequest(webhook_body(signature)))
+
+        self.assertEqual(payload["data"]["order_id"], "100")
+        self.assertEqual(payload["data"]["signature"], signature)
+
+    async def test_webhook_rejects_invalid_signature(self):
+        with self.assertRaises(PaymentInvalidProviderSignatureError):
+            await read_order_status_webhook_payload(FakeRequest(webhook_body("invalid")))
+
+    async def test_webhook_rejects_missing_signature(self):
+        with self.assertRaises(PaymentInvalidProviderSignatureError):
+            await read_order_status_webhook_payload(FakeRequest(webhook_body(None)))
 
 
 class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):

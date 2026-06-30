@@ -8,9 +8,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
-from api.exceptions import OrderNotFoundError, PaymentInvalidProviderResponseError
+from api.exceptions import (
+    OrderNotFoundError,
+    PaymentInvalidProviderResponseError,
+    PaymentInvalidProviderSignatureError,
+)
+from api.payments.auth_methods import is_valid_signature
 from api.payments.payments_methods import complete_paymented_deal
-from api.payments.utils.xml_response_parser import parse_paygine_response
+from api.payments.utils.xml_response_parser import parse_paygine_response, xml_leaf_values
 from api.utils.help_orders_method import (
     add_order_status_history,
     order_status_value,
@@ -22,6 +27,7 @@ from database.models.payments import OrderPaymentData
 
 
 ORDER_REFERENCE_PREFIX = "gladeal-order-"
+WEBHOOK_SIGNATURE_KEY = "signature"
 WebhookOperationType = Literal["payment", "payout", "refund"]
 
 
@@ -40,7 +46,19 @@ class WebhookOrderOperation:
 async def read_order_status_webhook_payload(request: Request) -> dict[str, object]:
     """Читаем XML callback Paygine без бизнес-обработки."""
     body = await request.body()
-    return parse_paygine_response(body.decode("utf-8"))
+    payload = parse_paygine_response(body.decode("utf-8"))
+    validate_order_status_webhook_signature(payload)
+    return payload
+
+
+def validate_order_status_webhook_signature(payload: dict[str, object]) -> None:
+    data = _webhook_data(payload)
+    signature = data.get(WEBHOOK_SIGNATURE_KEY)
+    if not isinstance(signature, str) or not is_valid_signature(
+        xml_leaf_values(data, excluded_keys={WEBHOOK_SIGNATURE_KEY}),
+        signature,
+    ):
+        raise PaymentInvalidProviderSignatureError(details=payload)
 
 
 def get_order_status_webhook_state(payload: dict[str, object]) -> str:

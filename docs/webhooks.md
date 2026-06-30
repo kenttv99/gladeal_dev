@@ -14,6 +14,7 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 - `api/servers/payments.py` - отдельное приложение для webhook-ов Paygine.
 - `api/webhooks/v1/order_status_webhook.py` - обработка статусов платежных операций.
 - `api/utils/order_status_webhook_methods.py` - бизнес-логика обновления заказа по callback-у.
+- `api/payments/auth_methods.py` - проверка цифровой подписи Paygine.
 - `api/payments/utils/xml_response_parser.py` - разбор XML тела запроса.
 - `database/models/orders.py` - статус сделки и история статусов.
 - `database/models/payments.py` - платежные статусы и ids Paygine-операций.
@@ -34,6 +35,7 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 - читает raw XML body из `Request`;
 - логирует полученный payload;
 - парсит payload в dict;
+- проверяет `data.signature` по листовым XML-значениям без поля `signature`;
 - нормализует `data.order_state` в `OrderPaymentStates`;
 - определяет тип операции по `data.reference` и `data.order_id`;
 - обновляет `orders` и `orders_payment_data` в одной транзакции.
@@ -51,6 +53,7 @@ Webhook-обработчики Paygine вынесены в отдельное Fa
 - `paygine_revoked_operation_id`.
 
 Если payload не соответствует ожидаемой структуре, выбрасывается `PaymentInvalidProviderResponseError`.
+Если `signature` отсутствует или не совпадает с расчетной подписью, выбрасывается `PaymentInvalidProviderSignatureError`.
 
 ## Обработка payment callback
 
