@@ -191,15 +191,32 @@ async def get_order_refund_operation_id(order_id: int, client_id: int) -> int:
         return int(row[0])
 
 
-async def get_order_info_by_slug(slug: str) -> OrderInfoWithPaymentDataResponse:
+async def get_order_info_by_slug(
+    slug: str,
+    user_id: int,
+) -> OrderInfoWithPaymentDataResponse:
     """Получаем детальную информацию о сделке по slug."""
     async with AsyncSessionLocal() as session:
         order_data = await get_order_info_payment_data(session, Order.slug == slug)
+        ensure_order_info_visible_to_user(
+            order_data.order.client_id,
+            order_data.order.performer_id,
+            user_id,
+        )
         return OrderInfoWithPaymentDataResponse(
             **OrderInfoResponse.model_validate(order_data.order).model_dump(),
             customer_email=order_data.customer_email,
             performer_email=order_data.performer_email,
         )
+
+
+def ensure_order_info_visible_to_user(
+    client_id: int,
+    performer_id: int | None,
+    user_id: int,
+) -> None:
+    if performer_id is not None and user_id not in {client_id, performer_id}:
+        raise OrderAlreadyAcceptedError()
 
 
 async def get_order_info_by_id(order_id: int) -> OrderInfoWithPaymentDataResponse:

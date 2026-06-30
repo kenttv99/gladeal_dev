@@ -48,7 +48,7 @@ async def order_info_by_slug(
     slug: str,
     authorized_user_id: int = Depends(authorize_active_user),
 ):
-    return await get_order_info_by_slug(slug)
+    return await get_order_info_by_slug(slug, authorized_user_id)
 
 
 @router.get("/order_info", response_model=OrderInfoWithPaymentDataResponse)
