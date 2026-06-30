@@ -7,6 +7,10 @@ from api.sms_calls.utils.verification_code_storage_methods import (
     consume_user_verified,
     delete_phone_verification_code,
     delete_user_verification_code,
+    release_phone_code_send,
+    release_user_code_send,
+    reserve_phone_code_send,
+    reserve_user_code_send,
     save_phone_verification_code,
     save_phone_verified,
     save_user_verification_code,
@@ -21,14 +25,18 @@ async def _send_code(
     scope: str,
     save_code,
     delete_code,
+    reserve_send,
+    release_send,
     send_code,
     include_sent_flag: bool,
 ) -> dict[str, object]:
+    await reserve_send(target, scope)
     code = generate_verification_code()
     await save_code(target, code, scope)
     try:
         provider_response = await send_code(target, code)
     except Exception:
+        await release_send(target, scope)
         await delete_code(target, scope)
         raise
     response = {"success": True, "provider_response": provider_response}
@@ -57,6 +65,8 @@ async def send_user_sms_code(user_id: int, phone: int | str, scope: str = "login
         scope,
         save_user_verification_code,
         delete_user_verification_code,
+        reserve_user_code_send,
+        release_user_code_send,
         lambda _, code: send_prosto_sms_code(normalize_phone_to_int(phone), code),
         False,
     )
@@ -69,6 +79,8 @@ async def send_user_call_code(user_id: int, phone: int | str, scope: str = "logi
         scope,
         save_user_verification_code,
         delete_user_verification_code,
+        reserve_user_code_send,
+        release_user_code_send,
         lambda _, code: send_prosto_call_code(normalize_phone_to_int(phone), code),
         False,
     )
@@ -92,6 +104,8 @@ async def send_phone_sms_code(phone: int | str, scope: str = "register") -> dict
         scope,
         save_phone_verification_code,
         delete_phone_verification_code,
+        reserve_phone_code_send,
+        release_phone_code_send,
         send_prosto_sms_code,
         True,
     )
@@ -105,6 +119,8 @@ async def send_phone_call_code(phone: int | str, scope: str = "register") -> dic
         scope,
         save_phone_verification_code,
         delete_phone_verification_code,
+        reserve_phone_code_send,
+        release_phone_code_send,
         send_prosto_call_code,
         True,
     )

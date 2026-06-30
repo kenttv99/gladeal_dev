@@ -21,5 +21,6 @@
   "PAYMENT_INVALID_PROVIDER_SIGNATURE": "Некорректная подпись ответа платежного провайдера.",
   "PAYMENT_DATA_SAVE_FAILED": "Не удалось сохранить платежные данные.",
   "ORDER_PAYMENT_INVALID_STATUS": "Некорректный статус платежного заказа для этой операции.",
-  "SMS_CALLS_PROVIDER_ERROR": "Провайдер SMS/звонков вернул ошибку."
+  "SMS_CALLS_PROVIDER_ERROR": "Провайдер SMS/звонков вернул ошибку.",
+  "SMS_CALLS_RATE_LIMIT": "Превышен лимит попыток SMS/звонков. Повторите позже."
 }

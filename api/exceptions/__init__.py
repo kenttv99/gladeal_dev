@@ -20,6 +20,7 @@ from api.exceptions.exceptions import (
     PaymentInvalidProviderSignatureError,
     OrderPaymentInvalidStatusError,
     SmsCallsProviderError,
+    SmsCallsRateLimitError,
 )
 from api.exceptions.handler import register_exception_handlers
 
@@ -45,5 +46,6 @@ __all__ = [
     "PaymentInvalidProviderSignatureError",
     "OrderPaymentInvalidStatusError",
     "SmsCallsProviderError",
+    "SmsCallsRateLimitError",
     "register_exception_handlers",
 ]

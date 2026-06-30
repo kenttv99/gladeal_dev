@@ -21,5 +21,6 @@
   "PAYMENT_INVALID_PROVIDER_SIGNATURE": "The payment provider response signature is invalid.",
   "PAYMENT_DATA_SAVE_FAILED": "Failed to save payment data.",
   "ORDER_PAYMENT_INVALID_STATUS": "The order payment status is invalid for this operation.",
-  "SMS_CALLS_PROVIDER_ERROR": "The SMS/calls provider returned an error."
+  "SMS_CALLS_PROVIDER_ERROR": "The SMS/calls provider returned an error.",
+  "SMS_CALLS_RATE_LIMIT": "The SMS/call attempts limit has been exceeded. Try again later."
 }

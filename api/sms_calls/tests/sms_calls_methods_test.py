@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, patch
 
 environ.setdefault("SMS_CALLS_REDIS_URL", "redis://localhost:6379/0")
 environ.setdefault("SMS_CALLS_CODE_TTL_SECONDS", "300")
+environ.setdefault("SMS_CALLS_SEND_ATTEMPTS_LIMIT", "3")
+environ.setdefault("SMS_CALLS_SEND_LIMIT_PAUSE_MINUTES", "15")
+environ.setdefault("SMS_CALLS_VERIFY_ATTEMPTS_LIMIT", "5")
 
 from api.sms_calls.config import PROSTO_SMS_API_KEY
 from api.exceptions import SmsCallsProviderError
@@ -15,8 +18,12 @@ from api.sms_calls.utils.provider_response_methods import validate_prosto_sms_re
 from api.sms_calls.utils.sms_methods import build_prosto_sms_payload
 from api.sms_calls.utils.verification_code_storage_methods import (
     build_phone_verification_code_key,
+    build_phone_send_attempts_key,
+    build_phone_verification_attempts_key,
     build_phone_verified_key,
+    build_user_send_attempts_key,
     build_user_verification_code_key,
+    build_user_verification_attempts_key,
     build_user_verified_key,
 )
 
@@ -70,6 +77,24 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
             "sms_calls:verified:register:phone:79000000001",
         )
 
+    def test_build_attempt_keys(self):
+        self.assertEqual(
+            build_user_verification_attempts_key(15),
+            "sms_calls:verification_attempts:login:user:15",
+        )
+        self.assertEqual(
+            build_phone_verification_attempts_key(79000000001),
+            "sms_calls:verification_attempts:register:phone:79000000001",
+        )
+        self.assertEqual(
+            build_user_send_attempts_key(15),
+            "sms_calls:send_attempts:login:user:15",
+        )
+        self.assertEqual(
+            build_phone_send_attempts_key(79000000001),
+            "sms_calls:send_attempts:register:phone:79000000001",
+        )
+
     def test_normalize_phone_to_int(self):
         self.assertEqual(normalize_phone_to_int("+7 (900) 000-00-01"), 79000000001)
 
@@ -84,12 +109,17 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(),
             ) as save_code,
             patch(
+                "api.sms_calls.sms_calls_methods.reserve_user_code_send",
+                new=AsyncMock(),
+            ) as reserve_send,
+            patch(
                 "api.sms_calls.sms_calls_methods.send_prosto_sms_code",
                 new=AsyncMock(return_value={"response": "ok"}),
             ) as send_code,
         ):
             response = await send_user_sms_code(10, "+7 (900) 000-00-01")
 
+        reserve_send.assert_awaited_once_with(10, "login")
         save_code.assert_awaited_once_with(10, "1234", "login")
         send_code.assert_awaited_once_with(79000000001, "1234")
         self.assertEqual(response, {"success": True, "provider_response": {"response": "ok"}})
@@ -124,6 +154,14 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(),
             ) as save_code,
             patch(
+                "api.sms_calls.sms_calls_methods.reserve_user_code_send",
+                new=AsyncMock(),
+            ) as reserve_send,
+            patch(
+                "api.sms_calls.sms_calls_methods.release_user_code_send",
+                new=AsyncMock(),
+            ) as release_send,
+            patch(
                 "api.sms_calls.sms_calls_methods.delete_user_verification_code",
                 new=AsyncMock(),
             ) as delete_code,
@@ -135,6 +173,8 @@ class SmsCallsMethodsTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(SmsCallsProviderError):
                 await send_user_sms_code(10, "+7 (900) 000-00-01")
 
+        reserve_send.assert_awaited_once_with(10, "login")
+        release_send.assert_awaited_once_with(10, "login")
         save_code.assert_awaited_once_with(10, "1234", "login")
         delete_code.assert_awaited_once_with(10, "login")
 

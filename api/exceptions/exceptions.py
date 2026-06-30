@@ -122,3 +122,8 @@ class OrderPaymentInvalidStatusError(BaseAPIException):
 class SmsCallsProviderError(BaseAPIException):
     status_code = 502
     error_code = "SMS_CALLS_PROVIDER_ERROR"
+
+
+class SmsCallsRateLimitError(BaseAPIException):
+    status_code = 429
+    error_code = "SMS_CALLS_RATE_LIMIT"
