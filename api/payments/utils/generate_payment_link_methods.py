@@ -6,7 +6,7 @@ from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_BASE_URL, PAYGINE_SECTOR, SR_REF
 
 
-GENERATE_PAYMENT_LINK_ENDPOINT = "/webapi/b2puser/sd-services/SDPayInDebit"
+GENERATE_PAYMENT_LINK_ENDPOINT = "/webapi/sd/SDPayInDebit"
 GENERATE_PAYMENT_LINK_SIGNATURE_FIELDS = ("sector", "id", "sd_ref")
 
 

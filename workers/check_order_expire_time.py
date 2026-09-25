@@ -4,7 +4,11 @@ import asyncio
 import logging
 
 from database.config import AsyncSessionLocal
-from workers.utils.order_expire_methods import WORKER_SLEEP_SECONDS, process_expired_orders
+from workers.utils.order_expire_methods import (
+    WORKER_SLEEP_SECONDS,
+    process_authorized_payments,
+    process_expired_orders,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -15,9 +19,11 @@ async def run_worker() -> None:
     while True:
         try:
             async with AsyncSessionLocal() as session:
+                processed_holds = await process_authorized_payments(session)
                 processed = await process_expired_orders(session)
             logger.info(
-                "Processed expired orders: cancle=%s confirm=%s",
+                "Processed worker iteration: completed_holds=%s cancle=%s confirm=%s",
+                processed_holds,
                 processed["cancle"],
                 processed["confirm"],
             )

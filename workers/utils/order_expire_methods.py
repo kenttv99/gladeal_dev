@@ -8,15 +8,17 @@ import logging
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import EXPIRE_TIME_TO_COMNFIRM_MINUTES
+from api.config import EXPIRE_TIME_TO_COMNFIRM_MINUTES, PAYMENT_HOLD_DURATION_MINUTES
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, ValidationError
 from api.payments.payments_methods import (
+    complete_paymented_deal,
     refund_money,
     register_payout_deal,
 )
 from api.schemas.schemas_v1 import RegisterPayoutDealPaymentRequest, RefundMoneyPaymentRequest
 from api.utils.help_orders_method import (
+    CLOSED_ORDER_STATUSES,
     add_order_status_history,
     ensure_order_payment_status,
     order_status_value,
@@ -347,3 +349,112 @@ async def process_expired_orders(session: AsyncSession) -> dict[str, int]:
                     logger.info("Skipped expired order %s with action %s", order_id, act)
                 else:
                     processed[act] += 1
+
+
+async def claim_authorized_payment_order_ids(
+    session: AsyncSession,
+    limit: int = EXPIRED_ORDER_BATCH_SIZE,
+) -> list[int]:
+    """Выбираем заказы с захолдированной оплатой старше PAYMENT_HOLD_DURATION_MINUTES."""
+    checked_at = datetime.now(timezone.utc)
+    hold_cutoff = checked_at - timedelta(minutes=float(PAYMENT_HOLD_DURATION_MINUTES))
+
+    candidate_ids = (
+        select(Order.id)
+        .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .where(
+            OrderPaymentData.payment_status == OrderPaymentStates.AUTHORIZED.value,
+            OrderPaymentData.payment_authorized_at.is_not(None),
+            OrderPaymentData.payment_authorized_at <= hold_cutoff,
+            Order.status.not_in((
+                OrderStates.AWAITING_CONFLICT.value,
+                OrderStates.OPEN_CONFLICT.value,
+                *CLOSED_ORDER_STATUSES,
+            )),
+            worker_check_allowed(checked_at),
+        )
+        .order_by(OrderPaymentData.payment_authorized_at, Order.id)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+        .cte("candidate_authorized_orders")
+    )
+
+    async with session.begin():
+        return list(
+            (
+                await session.scalars(
+                    update(Order)
+                    .where(Order.id.in_(select(candidate_ids.c.id)))
+                    .values(checked_by_worker_at=checked_at)
+                    .returning(Order.id)
+                )
+            ).all()
+        )
+
+
+async def complete_authorized_order_payment(
+    session: AsyncSession,
+    order_id: int,
+) -> None:
+    """Выполняем SDComplete для захолдированного заказа и фиксируем статус COMPLETED."""
+    async with session.begin():
+        result = await session.execute(
+            select(
+                Order.status,
+                OrderPaymentData.payment_status,
+                OrderPaymentData.paygine_payment_operation_id,
+            )
+            .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+            .where(Order.id == order_id)
+            .with_for_update(of=(Order, OrderPaymentData))
+        )
+        row = result.one_or_none()
+        if row is None:
+            raise OrderNotFoundError()
+
+        current_order_status, current_payment_status, payment_operation_id = row
+        current_payment_val = (
+            current_payment_status.value
+            if isinstance(current_payment_status, OrderPaymentStates)
+            else current_payment_status
+        )
+        if (
+            current_payment_val != OrderPaymentStates.AUTHORIZED.value
+            or order_status_value(current_order_status) in (
+                OrderStates.AWAITING_CONFLICT.value,
+                OrderStates.OPEN_CONFLICT.value,
+                *CLOSED_ORDER_STATUSES,
+            )
+        ):
+            return
+
+        if payment_operation_id is None:
+            raise OrderNotFoundError()
+
+        await complete_paymented_deal(int(payment_operation_id))
+        await session.execute(
+            update(OrderPaymentData)
+            .where(OrderPaymentData.order_id == order_id)
+            .values(
+                payment_status=OrderPaymentStates.COMPLETED.value,
+                payment_complete_at=func.now(),
+                updated_at=func.now(),
+            )
+        )
+
+
+async def process_authorized_payments(session: AsyncSession) -> int:
+    """Списываем захолдированные платежи старше 5 минут батчами."""
+    processed_count = 0
+    while True:
+        order_ids = await claim_authorized_payment_order_ids(session)
+        if not order_ids:
+            return processed_count
+
+        for order_id in order_ids:
+            try:
+                await complete_authorized_order_payment(session, order_id)
+            except Exception:
+                logger.exception("Failed to complete authorized payment for order %s", order_id)
+            else:
+                processed_count += 1

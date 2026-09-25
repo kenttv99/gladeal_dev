@@ -34,6 +34,7 @@ class OrderPaymentData(Base):
             "paygine_payout_operation_id",
             unique=True,
         ),
+        Index("ix_orders_payment_data_payment_authorized_at", "payment_authorized_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -88,6 +89,10 @@ class OrderPaymentData(Base):
         nullable=True,
     )
     payment_complete_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    payment_authorized_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -140,7 +141,7 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
         cancel.assert_awaited_once_with(10)
         set_status.assert_awaited_once_with(session, 1, OrderStates.AWAITING_PAYMENT.value, 2)
 
-    async def test_client_softdecline_from_paid_status_registers_refund(self):
+    async def test_client_softdecline_from_paid_status_moves_to_conflict(self):
         session = FakeSession()
         with (
             patch.object(orders_methods, "AsyncSessionLocal", return_value=session),
@@ -164,31 +165,17 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
-            patch.object(
-                orders_methods,
-                "refund_money",
-                new=AsyncMock(
-                    return_value=SimpleNamespace(
-                        payment_values=SimpleNamespace(paygine_payout_operation_id="20")
-                    )
-                ),
-            ) as refund,
-            patch.object(
-                orders_methods,
-                "set_client_refund_order_status",
-                new=AsyncMock(),
-            ) as set_status,
+            patch.object(orders_methods, "add_order_status_history", new=AsyncMock()) as add_history,
         ):
             await orders_methods.client_softdecline_order(1, 2)
 
         cancel.assert_not_awaited()
-        refund.assert_awaited_once()
-        set_status.assert_awaited_once_with(
+        add_history.assert_awaited_once_with(
             session,
             1,
             OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+            OrderStates.AWAITING_CONFLICT.value,
             2,
-            "20",
         )
 
     async def test_client_softdecline_from_awaiting_client_payout_is_noop(self):
@@ -258,7 +245,7 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                 "get_performer_decline_refund_data",
                 new=AsyncMock(
                     return_value=(
-                        None,
+                        10,
                         SimpleNamespace(
                             current_status=OrderStates.AWAITING_CONFLICT.value,
                             client_id=2,
@@ -266,11 +253,63 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                             customer_phone="+79990000000",
                             price=100,
                             title="Order",
+                            payment_operation_id=10,
+                            payment_status=OrderPaymentStates.AUTHORIZED.value,
+                            payment_authorized_at=datetime.now(timezone.utc),
                         ),
                     )
                 ),
             ),
+            patch.object(orders_methods, "get_client_cancel_request_time", new=AsyncMock(return_value=datetime.now(timezone.utc))),
             patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
+            patch.object(orders_methods, "reverse_paymented_deal", new=AsyncMock()) as reverse,
+            patch.object(orders_methods, "refund_money", new=AsyncMock()) as refund,
+            patch.object(
+                orders_methods,
+                "set_reversed_order_status",
+                new=AsyncMock(),
+            ) as set_rev_status,
+        ):
+            await orders_methods.performer_decline_order(1, 3)
+
+        cancel.assert_not_awaited()
+        reverse.assert_awaited_once_with(10)
+        refund.assert_not_awaited()
+        set_rev_status.assert_awaited_once_with(
+            session,
+            1,
+            OrderStates.AWAITING_CONFLICT.value,
+            3,
+        )
+
+    async def test_performer_decline_from_awaiting_conflict_after_hold(self):
+        session = FakeSession()
+        old_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        with (
+            patch.object(orders_methods, "AsyncSessionLocal", return_value=session),
+            patch.object(
+                orders_methods,
+                "get_performer_decline_refund_data",
+                new=AsyncMock(
+                    return_value=(
+                        10,
+                        SimpleNamespace(
+                            current_status=OrderStates.AWAITING_CONFLICT.value,
+                            client_id=2,
+                            customer_email="client@example.com",
+                            customer_phone="+79990000000",
+                            price=100,
+                            title="Order",
+                            payment_operation_id=10,
+                            payment_status=OrderPaymentStates.COMPLETED.value,
+                            payment_authorized_at=old_time,
+                        ),
+                    )
+                ),
+            ),
+            patch.object(orders_methods, "get_client_cancel_request_time", new=AsyncMock(return_value=datetime.now(timezone.utc))),
+            patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
+            patch.object(orders_methods, "reverse_paymented_deal", new=AsyncMock()) as reverse,
             patch.object(
                 orders_methods,
                 "refund_money",
@@ -289,6 +328,7 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             await orders_methods.performer_decline_order(1, 3)
 
         cancel.assert_not_awaited()
+        reverse.assert_not_awaited()
         refund.assert_awaited_once()
         set_status.assert_awaited_once_with(
             session,
@@ -307,7 +347,7 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                 "get_performer_decline_refund_data",
                 new=AsyncMock(
                     return_value=(
-                        None,
+                        10,
                         SimpleNamespace(
                             current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
                             client_id=2,
@@ -315,10 +355,14 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                             customer_phone="+79990000000",
                             price=100,
                             title="Order",
+                            payment_operation_id=10,
+                            payment_status=OrderPaymentStates.COMPLETED.value,
+                            payment_authorized_at=None,
                         ),
                     )
                 ),
             ),
+            patch.object(orders_methods, "get_client_cancel_request_time", new=AsyncMock(return_value=None)),
             patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
             patch.object(
                 orders_methods,
@@ -386,6 +430,7 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                         OrderPaymentStates.COMPLETED.value,
                         "client@example.com",
                         "+79990000000",
+                        None,
                     )
                 )
             ],

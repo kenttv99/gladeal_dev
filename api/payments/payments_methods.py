@@ -8,6 +8,7 @@ from api.payments.utils.register_deal_methods import (
     create_payout_deal,
 )
 from api.payments.utils.refund_money_methods import refund_registered_deal
+from api.payments.utils.reverse_paymented_deal_methods import reverse_registered_deal
 from api.schemas.schemas_v1 import (
     RegisterDepositDealPaymentRequest,
     RegisterDepositDealPaymentResponse,
@@ -63,6 +64,13 @@ async def refund_money(
 ) -> RegisterPayoutDealPaymentResponse:
     """Регистрируем возврат средств заказчику без сервисной комиссии."""
     return await refund_registered_deal(payment_data)
+
+
+async def reverse_paymented_deal(
+    paygine_payment_operation_id: int,
+) -> dict[str, object]:
+    """Отменяем холдирование (разморозка средств) заказчику в ПЦ без списания комиссий."""
+    return await reverse_registered_deal(paygine_payment_operation_id)
 
 
 async def get_balance() -> dict[str, object]:

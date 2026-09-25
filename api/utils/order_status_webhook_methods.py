@@ -14,7 +14,6 @@ from api.exceptions import (
     PaymentInvalidProviderSignatureError,
 )
 from api.payments.auth_methods import is_valid_signature
-from api.payments.payments_methods import complete_paymented_deal
 from api.payments.utils.xml_response_parser import parse_paygine_response, xml_leaf_values
 from api.utils.help_orders_method import (
     add_order_status_history,
@@ -182,21 +181,34 @@ async def set_webhook_payment_authorized(
     if operation.payment_operation_id is None:
         raise OrderNotFoundError()
     current_payment_status = payment_status_value(operation.payment_status)
-    if current_payment_status not in {
-        OrderPaymentStates.AUTHORIZED.value,
-        OrderPaymentStates.COMPLETED.value,
-    }:
-        await complete_paymented_deal(operation.payment_operation_id)
 
+    is_new_authorization = current_payment_status != OrderPaymentStates.AUTHORIZED.value
     if current_payment_status != OrderPaymentStates.COMPLETED.value:
         await session.execute(
             update(OrderPaymentData)
             .where(OrderPaymentData.id == operation.payment_data_id)
             .values(
                 payment_status=OrderPaymentStates.AUTHORIZED.value,
+                payment_authorized_at=func.now(),
                 updated_at=func.now(),
             )
         )
+
+    current_status_value = order_status_value(operation.order_status)
+    if current_status_value == OrderStates.AWAITING_PAYMENT.value:
+        await session.execute(
+            update(Order)
+            .where(Order.id == operation.order_id)
+            .values(status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value)
+        )
+        if is_new_authorization:
+            await add_order_status_history(
+                session,
+                operation.order_id,
+                current_status_value,
+                OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+                None,
+            )
 
 
 async def set_webhook_payment_completed(

@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import OrderStates, UserRoles
+from api.enums.enums_v1 import OrderPaymentStates, OrderStates, UserRoles
 from api.exceptions import (
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
@@ -17,6 +17,7 @@ from api.payments.payments_methods import (
     refund_money,
     register_deposit_deal,
     register_payout_deal,
+    reverse_paymented_deal,
 )
 from api.schemas.schemas_v1 import (
     CreateOrderResponse,
@@ -38,16 +39,19 @@ from api.utils.help_orders_method import (
     ensure_registered_order_payment_status,
     ensure_user_exists,
     generate_order_link,
+    get_client_cancel_request_time,
     get_client_confirm_payment_data,
     get_client_softdecline_refund_data,
     get_order_info_payment_data,
     get_performer_decline_refund_data,
     get_softdecline_payment_operation_id,
+    is_cancellation_within_hold_duration,
     order_status_value,
     order_status_values,
     set_client_refund_order_status,
     set_client_confirmed_order_status,
     set_performer_declined_order_status,
+    set_reversed_order_status,
     set_softdeclined_order_status,
     UNPAID_ORDER_STATUSES,
 )
@@ -420,6 +424,30 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                 return
             if order_status_value(refund_data.current_status) == OrderStates.AWAITING_CLIENT_PAYOUT.value:
                 return
+
+            client_cancel_at = await get_client_cancel_request_time(
+                session, order_id, refund_data.client_id
+            )
+            payment_status_val = (
+                refund_data.payment_status.value
+                if hasattr(refund_data.payment_status, "value")
+                else refund_data.payment_status
+            )
+            op_id = payment_operation_id or refund_data.payment_operation_id
+            if (
+                payment_status_val == OrderPaymentStates.AUTHORIZED.value
+                and is_cancellation_within_hold_duration(refund_data.payment_authorized_at, client_cancel_at)
+                and op_id is not None
+            ):
+                await reverse_paymented_deal(op_id)
+                await set_reversed_order_status(
+                    session,
+                    order_id,
+                    refund_data.current_status,
+                    performer_id,
+                )
+                return
+
             refund_result = await refund_money(
                 RefundMoneyPaymentRequest(
                     order_id=order_id,
@@ -456,22 +484,17 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
                     == OrderStates.AWAITING_CLIENT_PAYOUT.value
                 ):
                     return
-                refund_result = await refund_money(
-                    RefundMoneyPaymentRequest(
-                        order_id=order_id,
-                        client_id=refund_data.client_id,
-                        customer_email=refund_data.customer_email,
-                        customer_phone=refund_data.customer_phone,
-                        amount=refund_data.price,
-                        description=refund_data.title,
-                    )
+                await session.execute(
+                    update(Order)
+                    .where(Order.id == order_id)
+                    .values(**order_status_values(OrderStates.AWAITING_CONFLICT.value))
                 )
-                await set_client_refund_order_status(
+                await add_order_status_history(
                     session,
                     order_id,
                     refund_data.current_status,
+                    OrderStates.AWAITING_CONFLICT.value,
                     client_id,
-                    refund_result.payment_values.paygine_payout_operation_id,
                 )
                 return
             await cancle_unpayment_deal(payment_operation_id)

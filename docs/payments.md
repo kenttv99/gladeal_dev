@@ -20,7 +20,8 @@
 - `api/payments/utils/register_deal_methods.py` - регистрация депозитных и payout-сделок.
 - `api/payments/utils/generate_payment_link_methods.py` - генерация ссылки оплаты.
 - `api/payments/utils/generate_withdrow_link_methods.py` - генерация ссылки выплаты исполнителю.
-- `api/payments/utils/complete_paymented_deal_methods.py` - завершение оплаченной сделки.
+- `api/payments/utils/complete_paymented_deal_methods.py` - завершение оплаченной сделки (списание холда).
+- `api/payments/utils/reverse_paymented_deal_methods.py` - разморозка (холдирование) средств без комиссии.
 - `api/payments/utils/cancle_unpayment_deal_methods.py` - перевод неоплаченной сделки в `EXPIRED`.
 - `api/payments/utils/refund_money_methods.py` - регистрация возврата средств заказчику.
 - `api/payments/payments_methods.py` - публичный фасад для API и воркеров.
@@ -118,14 +119,16 @@
 
 ## Ссылки Paygine
 
-### Оплата
+### Оплата (холдирование)
 
 Метод `generate_payment_link` строит signed URL на основе:
 
-- `/webapi/b2puser/sd-services/SDPayInDebit`
+- `/webapi/sd/SDPayInDebit`
 - `sector`
 - `id`
 - `sd_ref`
+
+При оплате средства замораживаются (холдируются) на карте заказчика, операция переходит в статус `AUTHORIZED`, а заказ — в статус `AWAITING_PERFORMER_CONFIRMATION` с фиксацией времени холдирования `payment_authorized_at`.
 
 ### Выплата исполнителю
 
@@ -136,10 +139,11 @@
 - `id`
 - `sd_ref`
 
-## Операции завершения
+## Операции завершения и холдирования
 
-- `complete_paymented_deal` вызывает `POST /webapi/b2puser/sd-services/SDComplete`.
-- `refund_money` регистрирует payout-операцию возврата через `POST /webapi/Register` с `client_ref` заказчика и суммой заказа без сервисной комиссии.
+- `complete_paymented_deal` вызывает `POST /webapi/sd/SDComplete` для окончательного списания холда. Запускается автоматически через фоновый воркер `process_authorized_payments` по истечении `PAYMENT_HOLD_DURATION_MINUTES` (по умолчанию 5 минут).
+- `reverse_paymented_deal` вызывает `POST /webapi/sd/SDReverse` для разморозки заблокированных средств без списания комиссии, если заказчик запросил отмену в течение 5 минут после холдирования и исполнитель подтвердил отказ (`performer_decline_order`).
+- `refund_money` регистрирует payout-операцию возврата через `POST /webapi/Register` с `client_ref` заказчика и суммой заказа без сервисной комиссии (применяется, если отмена произошла после списания холда).
 - `cancle_unpayment_deal` вызывает `POST /webapi/ChangeOrderStatus` с `order_state=EXPIRED`.
 
 Все эти методы используют общий `httpx.AsyncClient` и парсят ответ через `parse_paygine_response`.

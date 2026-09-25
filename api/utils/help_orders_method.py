@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from secrets import token_urlsafe
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import delete, exists, func, insert, select, update
@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.config import (
     BASE_SITE_LINK,
     MAX_SINGLE_ORDER_PRICE,
+    PAYMENT_HOLD_DURATION_MINUTES,
     VERIFICATION_REQUIRED_PRICE_THRESHOLD,
 )
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
@@ -75,6 +76,9 @@ class RefundMoneyOrderData:
     customer_phone: str
     price: Decimal
     title: str
+    payment_operation_id: int | None = None
+    payment_status: OrderPaymentStates | str | None = None
+    payment_authorized_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -137,10 +141,15 @@ def ensure_registered_order_payment_status(status: OrderPaymentStates | str | No
 
 def ensure_order_payment_status(
     status: OrderPaymentStates | str | None,
-    expected_status: OrderPaymentStates,
+    expected_status: OrderPaymentStates | tuple[OrderPaymentStates, ...],
 ) -> None:
     status_value = status.value if isinstance(status, OrderPaymentStates) else status
-    if status_value != expected_status.value:
+    expected_values = (
+        {s.value if isinstance(s, OrderPaymentStates) else s for s in expected_status}
+        if isinstance(expected_status, (tuple, list, set))
+        else {expected_status.value if isinstance(expected_status, OrderPaymentStates) else expected_status}
+    )
+    if status_value not in expected_values:
         raise OrderPaymentInvalidStatusError()
 
 
@@ -392,6 +401,7 @@ async def get_performer_decline_refund_data(
             OrderPaymentData.payment_status,
             OrderPaymentData.customer_email,
             User.phone_number,
+            OrderPaymentData.payment_authorized_at,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
         .join(User, User.id == Order.client_id)
@@ -411,6 +421,7 @@ async def get_performer_decline_refund_data(
         payment_status,
         customer_email,
         customer_phone,
+        payment_authorized_at,
     ) = row
     if client_id == performer_id:
         raise OrderSelfExecutionForbiddenError()
@@ -426,9 +437,15 @@ async def get_performer_decline_refund_data(
             customer_phone=customer_phone,
             price=price,
             title=title,
+            payment_operation_id=int(payment_operation_id),
+            payment_status=payment_status,
+            payment_authorized_at=payment_authorized_at,
         )
     else:
-        ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+        ensure_order_payment_status(
+            payment_status,
+            (OrderPaymentStates.AUTHORIZED, OrderPaymentStates.COMPLETED),
+        )
     return None, RefundMoneyOrderData(
         current_status=current_status,
         client_id=client_id,
@@ -436,6 +453,9 @@ async def get_performer_decline_refund_data(
         customer_phone=customer_phone,
         price=price,
         title=title,
+        payment_operation_id=int(payment_operation_id),
+        payment_status=payment_status,
+        payment_authorized_at=payment_authorized_at,
     )
 
 
@@ -467,6 +487,64 @@ async def set_performer_declined_order_status(
             updated_at=func.now(),
         )
     )
+
+
+async def set_reversed_order_status(
+    session: AsyncSession,
+    order_id: int,
+    current_status: OrderStates | str | None,
+    performer_id: int,
+) -> None:
+    await session.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(**order_status_values(OrderStates.UNSUCCESSFUL_COMPLETION.value))
+    )
+    await add_order_status_history(
+        session,
+        order_id,
+        current_status,
+        OrderStates.UNSUCCESSFUL_COMPLETION.value,
+        performer_id,
+    )
+    await session.execute(
+        update(OrderPaymentData)
+        .where(OrderPaymentData.order_id == order_id)
+        .values(
+            payment_status=OrderPaymentStates.CANCELED.value,
+            revoke_status=OrderPaymentStates.COMPLETED.value,
+            revoked_at=func.now(),
+            updated_at=func.now(),
+        )
+    )
+
+
+async def get_client_cancel_request_time(
+    session: AsyncSession,
+    order_id: int,
+    client_id: int,
+) -> datetime | None:
+    return await session.scalar(
+        select(OrderStatusHistory.created_at)
+        .where(
+            OrderStatusHistory.order_id == order_id,
+            OrderStatusHistory.new_status == OrderStates.AWAITING_CONFLICT.value,
+            OrderStatusHistory.changed_by_user_id == client_id,
+        )
+        .order_by(OrderStatusHistory.created_at.desc())
+        .limit(1)
+    )
+
+
+def is_cancellation_within_hold_duration(
+    payment_authorized_at: datetime | None,
+    client_cancelled_at: datetime | None,
+) -> bool:
+    if payment_authorized_at is None:
+        return False
+    cancel_time = client_cancelled_at or datetime.now(timezone.utc)
+    delta = cancel_time - payment_authorized_at
+    return delta <= timedelta(minutes=float(PAYMENT_HOLD_DURATION_MINUTES))
 
 
 async def get_softdecline_payment_operation_id(
@@ -554,7 +632,10 @@ async def get_client_softdecline_refund_data(
     )
     if payment_operation_id is None:
         raise OrderNotFoundError()
-    ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+    ensure_order_payment_status(
+        payment_status,
+        (OrderPaymentStates.AUTHORIZED, OrderPaymentStates.COMPLETED),
+    )
     return SoftdeclineOrderData(
         current_status=current_status,
         client_id=order_client_id,
