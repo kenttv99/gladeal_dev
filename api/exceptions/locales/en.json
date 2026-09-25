@@ -5,6 +5,8 @@
   "PHONE_NUMBER_ALREADY_EXISTS": "A user with this phone number already exists.",
   "ACCOUNT_DELETION_BLOCKED_BY_ACTIVE_ORDERS": "Account cannot be deleted while active orders exist.",
   "MONTH_ORDERS_LIMIT_EXCEEDED": "The user's monthly order amount limit has been exceeded.",
+  "ORDER_PRICE_LIMIT_EXCEEDED": "The amount of a single deal cannot exceed 100,000 rubles.",
+  "USER_VERIFICATION_REQUIRED": "Verification is required for deals with an amount of 15,000 rubles or more.",
   "ORDER_NOT_FOUND": "Order not found.",
   "ORDER_ALREADY_ACCEPTED": "Order cannot be declined because it has already been accepted by a performer.",
   "ORDER_SELF_EXECUTION_FORBIDDEN": "A user cannot perform their own order.",

@@ -59,6 +59,8 @@ OpenAPI JSON основного API:
 - `JWT_REFRESH_TOKEN_EXPIRE_MINUTES` - время жизни refresh token в минутах.
 - `BASE_SITE_LINK` - базовый адрес сайта для формирования ссылок на сделки и Paygine notify URL.
 - `EXPIRE_TIME_TO_COMNFIRM_MINUTES` - время ожидания подтверждения сделки в минутах.
+- `MAX_SINGLE_ORDER_PRICE` - максимальная сумма одной сделки (по умолчанию 100 000).
+- `VERIFICATION_REQUIRED_PRICE_THRESHOLD` - порог суммы сделки, начиная с которого требуется верификация (по умолчанию 15 000).
 
 Платежный контур использует отдельный `.env.payments`; подробный список переменных вынесен в [docs/payments.md](payments.md).
 
@@ -329,6 +331,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 Создание сделки:
 
 - проверяет существование пользователя;
+- проверяет сумму сделки (до 15 000 руб. — без ограничений; от 15 000 до 100 000 руб. — требует верификации с ошибкой `USER_VERIFICATION_REQUIRED`; свыше 100 000 руб. — запрещено с ошибкой `ORDER_PRICE_LIMIT_EXCEEDED`);
 - проверяет месячный лимит суммы сделок через `User.month_sum_limit`;
 - генерирует уникальный `slug`;
 - создает сделку в статусе `awaiting_performer`;

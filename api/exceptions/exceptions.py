@@ -41,6 +41,17 @@ class MonthOrdersLimitExceededError(BaseAPIException):
     error_code = "MONTH_ORDERS_LIMIT_EXCEEDED"
 
 
+class OrderPriceLimitExceededError(BaseAPIException):
+    status_code = 400
+    error_code = "ORDER_PRICE_LIMIT_EXCEEDED"
+
+
+class UserVerificationRequiredError(BaseAPIException):
+    status_code = 403
+    error_code = "USER_VERIFICATION_REQUIRED"
+
+
+
 class OrderNotFoundError(BaseAPIException):
     status_code = 404
     error_code = "ORDER_NOT_FOUND"

@@ -6,15 +6,21 @@ from decimal import Decimal
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import BASE_SITE_LINK
+from api.config import (
+    BASE_SITE_LINK,
+    MAX_SINGLE_ORDER_PRICE,
+    VERIFICATION_REQUIRED_PRICE_THRESHOLD,
+)
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import (
     MonthOrdersLimitExceededError,
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
     OrderPaymentInvalidStatusError,
+    OrderPriceLimitExceededError,
     OrderSelfExecutionForbiddenError,
     UserNotFoundError,
+    UserVerificationRequiredError,
     ValidationError,
 )
 from database.models.orders import Order, OrderStatusHistory
@@ -179,6 +185,14 @@ async def create_order_record(
     if customer is None:
         raise UserNotFoundError()
     customer_phone, user_month_sum_limit = customer
+
+    if not check_order_price_limit(price):
+        raise UserVerificationRequiredError(
+            details={
+                "price": str(price),
+                "threshold": str(VERIFICATION_REQUIRED_PRICE_THRESHOLD),
+            }
+        )
 
     limit_check = await check_user_month_orders_limit(
         session,
@@ -604,6 +618,23 @@ async def set_softdeclined_order_status(
         .where(OrderPaymentData.order_id == order_id)
         .values(payment_status=OrderPaymentStates.EXPIRED.value)
     )
+
+
+def check_order_price_limit(price: Decimal) -> bool:
+    """
+    Проверяет сумму сделки:
+    - до 15 000 руб. — пропускается (True);
+    - от 15 000 до 100 000 руб. — останавливается (False, заглушка перед верификацией);
+    - свыше 100 000 руб. — исключение OrderPriceLimitExceededError.
+    """
+    if price > MAX_SINGLE_ORDER_PRICE:
+        raise OrderPriceLimitExceededError(
+            details={
+                "price": str(price),
+                "max_price": str(MAX_SINGLE_ORDER_PRICE),
+            }
+        )
+    return price < VERIFICATION_REQUIRED_PRICE_THRESHOLD
 
 
 async def check_user_month_orders_limit(
