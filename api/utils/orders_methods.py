@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import OrderPaymentStates, OrderStates, UserRoles
+from api.enums.enums_v1 import OrderPaymentStates, OrderStates, OrderTypes, UserRoles
 from api.exceptions import (
     OrderAlreadyAcceptedError,
     OrderNotFoundError,
@@ -62,13 +62,19 @@ from database.models.payments import OrderPaymentData
 
 async def create_order(
     client_id: int,
-    customer_email: str,
+    order_type: OrderTypes | str,
     title: str,
-    conditions: str,
-    result_requirements: str,
-    violation_proof_requirements: str,
+    customer_email: str,
     price: Decimal,
     expire_in: datetime,
+    violation_proof_requirements: str,
+    source_of_truth: str | None = None,
+    site_or_app: str | None = None,
+    customer_identity: str | None = None,
+    additional_requirements: str | None = None,
+    contact_free_deal: str | None = None,
+    task_free_deal: str | None = None,
+    how_to_proove_free_deal: str | None = None,
 ) -> CreateOrderResponse:
     """
     Метод создает ордер и проверяет месячный лимит пользователя из базы данных, производит запрос к платежной системе, получает ответ и записывает данные в таблицы.
@@ -83,12 +89,18 @@ async def create_order(
                     order, customer_phone = await create_order_record(
                         session=session,
                         client_id=client_id,
+                        order_type=order_type,
                         title=title,
-                        conditions=conditions,
-                        result_requirements=result_requirements,
                         violation_proof_requirements=violation_proof_requirements,
                         price=price,
                         expire_in=expire_in,
+                        source_of_truth=source_of_truth,
+                        site_or_app=site_or_app,
+                        customer_identity=customer_identity,
+                        additional_requirements=additional_requirements,
+                        contact_free_deal=contact_free_deal,
+                        task_free_deal=task_free_deal,
+                        how_to_proove_free_deal=how_to_proove_free_deal,
                     )
                 break
             except IntegrityError as exc:

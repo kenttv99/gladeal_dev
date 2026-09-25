@@ -4,7 +4,9 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 from api.enums.enums_v1 import (
+    OrderPaymentStates,
     OrderStates,
+    OrderTypes,
     UserRoles,
     VerificationMethods,
     VerificationScopes,
@@ -131,10 +133,16 @@ class AdminOrderInfoResponse(BaseModel):
     id: int
     client_id: int
     performer_id: int | None
+    order_type: OrderTypes
     title: str
-    conditions: str
-    result_requirements: str
+    source_of_truth: str | None = None
+    site_or_app: str | None = None
+    customer_identity: str | None = None
     violation_proof_requirements: str
+    additional_requirements: str | None = None
+    contact_free_deal: str | None = None
+    task_free_deal: str | None = None
+    how_to_proove_free_deal: str | None = None
     slug: str
     price: Decimal
     status: OrderStates
@@ -151,13 +159,19 @@ class AdminOrderInfoResponse(BaseModel):
 ###
 
 class CreateOrderRequest(BaseModel):
-    customer_email: str
+    order_type: OrderTypes
     title: str
-    conditions: str
-    result_requirements: str
-    violation_proof_requirements: str
+    customer_email: str
     price: Decimal
     expire_in: datetime
+    violation_proof_requirements: str
+    source_of_truth: str | None = None
+    site_or_app: str | None = None
+    customer_identity: str | None = None
+    additional_requirements: str | None = None
+    contact_free_deal: str | None = None
+    task_free_deal: str | None = None
+    how_to_proove_free_deal: str | None = None
 
 
 class OrderInfoResponse(BaseModel):
@@ -166,10 +180,16 @@ class OrderInfoResponse(BaseModel):
     id: int
     client_id: int
     performer_id: int | None
+    order_type: OrderTypes
     title: str
-    conditions: str
-    result_requirements: str
+    source_of_truth: str | None = None
+    site_or_app: str | None = None
+    customer_identity: str | None = None
     violation_proof_requirements: str
+    additional_requirements: str | None = None
+    contact_free_deal: str | None = None
+    task_free_deal: str | None = None
+    how_to_proove_free_deal: str | None = None
     slug: str
     price: Decimal
     status: OrderStates

@@ -12,7 +12,7 @@ from api.config import (
     PAYMENT_HOLD_DURATION_MINUTES,
     VERIFICATION_REQUIRED_PRICE_THRESHOLD,
 )
-from api.enums.enums_v1 import OrderPaymentStates, OrderStates
+from api.enums.enums_v1 import OrderPaymentStates, OrderStates, OrderTypes
 from api.exceptions import (
     MonthOrdersLimitExceededError,
     OrderAlreadyAcceptedError,
@@ -179,12 +179,18 @@ async def add_order_status_history(
 async def create_order_record(
     session: AsyncSession,
     client_id: int,
+    order_type: OrderTypes | str,
     title: str,
-    conditions: str,
-    result_requirements: str,
     violation_proof_requirements: str,
     price: Decimal,
     expire_in: datetime,
+    source_of_truth: str | None = None,
+    site_or_app: str | None = None,
+    customer_identity: str | None = None,
+    additional_requirements: str | None = None,
+    contact_free_deal: str | None = None,
+    task_free_deal: str | None = None,
+    how_to_proove_free_deal: str | None = None,
 ) -> tuple[Order, str]:
     customer = (
         await session.execute(
@@ -212,14 +218,22 @@ async def create_order_record(
     if limit_check["is_limit_exceeded"]:
         raise MonthOrdersLimitExceededError(details=limit_check)
 
+    order_type_val = order_type.value if isinstance(order_type, OrderTypes) else order_type
+
     result = await session.execute(
         insert(Order)
         .values(
             client_id=client_id,
+            order_type=order_type_val,
             title=title,
-            conditions=conditions,
-            result_requirements=result_requirements,
+            source_of_truth=source_of_truth,
+            site_or_app=site_or_app,
+            customer_identity=customer_identity,
             violation_proof_requirements=violation_proof_requirements,
+            additional_requirements=additional_requirements,
+            contact_free_deal=contact_free_deal,
+            task_free_deal=task_free_deal,
+            how_to_proove_free_deal=how_to_proove_free_deal,
             slug=await generate_order_slug(session),
             price=price,
             expire_in=expire_in,
