@@ -35,6 +35,13 @@ class OrderStates(Enum):
     CLOSED_BY_ARBITER_TO_PERFORMER = "closed_by_arbiter_to_performer"
 
 
+class OrderTypes(Enum):
+    SUBSCRIPTIONS = "subscriptions"
+    TICKETS_AND_RESERVATIONS = "tickets_and_reservations"
+    FREE_DEAL = "free_deal"
+
+
+
 
 class UserRoles(Enum):
     PERFORMER = "performer"

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from api.enums.enums_v1 import OrderStates
+from api.enums.enums_v1 import OrderStates, OrderTypes
 
 from .base import Base, enum_column
 
@@ -18,13 +18,21 @@ if TYPE_CHECKING:
 
 class Order(Base):
     """Сделка:
+    order_type - тип сделки (из enum OrderTypes)
     title - название сделки
-    conditions - произвольные условия сделки (1 блок условий), которые вводит заказчик
-    result_requirements - условия из поля "Подробно Опишите в каком виде исполнитель должен предоставить результат"
-    violation_proof_requirements - условия из поля "Подробно опишите, как вы можете подтвердить нарушение условий"
+    source_of_truth - источник истины для разрешения споров
+    site_or_app - официальный сайт или приложение (опционально)
+    customer_identity - идентификатор заказчика (ID аккаунта, ФИО и т.д., опционально)
+    violation_proof_requirements - требования к доказательствам (flexbox: варианты через запятую + свой ввод)
+    additional_requirements - текст дополнительных требований (опционально)
+    contact_free_deal - источник проверки результата (свободная сделка)
+    task_free_deal - описание задачи (свободная сделка)
+    how_to_proove_free_deal - что докажет выполнение сделки (свободная сделка)
     slug - уникальный идентификатор сделки
     price - цена сделки
     status - статус сделки
+    checked_by_worker_at - дата последней проверки воркером
+    expire_in - дедлайн сделки
     created_at - дата создания сделки
     updated_at - дата обновления сделки
     completed_at - дата завершения сделки
@@ -34,6 +42,7 @@ class Order(Base):
     __table_args__ = (
         Index("ix_orders_client_id", "client_id"),
         Index("ix_orders_performer_id", "performer_id"),
+        Index("ix_orders_order_type", "order_type"),
         Index("ix_orders_status", "status"),
         Index("ix_orders_created_at", "created_at"),
         Index("ix_orders_client_created_id", "client_id", "created_at", "id"),
@@ -43,22 +52,38 @@ class Order(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     client_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     performer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    order_type: Mapped[OrderTypes] = mapped_column(
+        enum_column(OrderTypes, "order_types"),
+        nullable=False,
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    conditions: Mapped[str] = mapped_column(Text, nullable=False)
-    result_requirements: Mapped[str] = mapped_column(Text, nullable=False)
+    source_of_truth: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    site_or_app: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    customer_identity: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Поле FlexBox (выбранные пункты + пользовательский ввод, склеенные запятой)
     violation_proof_requirements: Mapped[str] = mapped_column(Text, nullable=False)
+    additional_requirements: Mapped[str | None] = mapped_column(Text, nullable=True)
     slug: Mapped[str] = mapped_column(String(500), unique=True, nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    contact_free_deal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    task_free_deal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    how_to_proove_free_deal: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[OrderStates] = mapped_column(
         enum_column(OrderStates, "order_states"),
         nullable=False,
         default=OrderStates.AWAITING_PERFORMER,
         server_default=OrderStates.AWAITING_PERFORMER.value,
     )
-    checked_by_worker_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
-
-    expire_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
+    checked_by_worker_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=True,
+    )
+    expire_in: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -92,6 +117,20 @@ class Order(Base):
         back_populates="order",
         cascade="all, delete-orphan",
         uselist=False,
+    )
+
+
+class OfferVersion(Base):
+    """Версии оферты"""
+
+    __tablename__ = "offer_versions"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
 
 

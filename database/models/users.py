@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, false, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Numeric, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.enums.enums_v1 import UserRoles, AdminRoles
@@ -22,8 +23,17 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     first_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    patronymic: Mapped[str] = mapped_column(String(128), nullable=False)
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    persondoc_number: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    month_sum_limit: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        default=Decimal("200000.00"),
+        server_default="200000.00",
+    )
     ppd: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     is_banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     ban_reason: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -46,6 +56,12 @@ class User(Base):
         nullable=False,
     )
 
+    kyc_data: Mapped["KYCData | None"] = relationship(
+        "KYCData",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
     client_orders: Mapped[list["Order"]] = relationship(
         "Order",
         back_populates="client",
@@ -65,6 +81,39 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+
+class KYCData(Base):
+    """KYC данные пользователя"""
+
+    __tablename__ = "kyc_data"
+    __table_args__ = (
+        Index("ix_kyc_data_user_id", "user_id", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    kyc_level: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    kyc_status: Mapped[bool] = mapped_column(Boolean, nullable=True, default=False, server_default=false())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="kyc_data")
+
 
 
 class UserRefreshToken(Base):
