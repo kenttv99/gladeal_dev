@@ -57,7 +57,6 @@ OpenAPI JSON основного API:
 - `JWT_ALGORITHM` - алгоритм JWT, например `HS256`.
 - `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` - время жизни access token в минутах.
 - `JWT_REFRESH_TOKEN_EXPIRE_MINUTES` - время жизни refresh token в минутах.
-- `MONTH_SUM_LIMIT_PER_USER` - месячный лимит суммы сделок пользователя.
 - `BASE_SITE_LINK` - базовый адрес сайта для формирования ссылок на сделки и Paygine notify URL.
 - `EXPIRE_TIME_TO_COMNFIRM_MINUTES` - время ожидания подтверждения сделки в минутах.
 
@@ -330,7 +329,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 Создание сделки:
 
 - проверяет существование пользователя;
-- проверяет месячный лимит суммы сделок через `MONTH_SUM_LIMIT_PER_USER`;
+- проверяет месячный лимит суммы сделок через `User.month_sum_limit`;
 - генерирует уникальный `slug`;
 - создает сделку в статусе `awaiting_performer`;
 - записывает первое состояние в `order_status_history`;

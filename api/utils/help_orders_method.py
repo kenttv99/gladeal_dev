@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import BASE_SITE_LINK, MONTH_SUM_LIMIT_PER_USER
+from api.config import BASE_SITE_LINK
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import (
     MonthOrdersLimitExceededError,
@@ -171,11 +171,21 @@ async def create_order_record(
     price: Decimal,
     expire_in: datetime,
 ) -> tuple[Order, str]:
-    customer_phone = await session.scalar(select(User.phone_number).where(User.id == client_id))
-    if customer_phone is None:
+    customer = (
+        await session.execute(
+            select(User.phone_number, User.month_sum_limit).where(User.id == client_id)
+        )
+    ).first()
+    if customer is None:
         raise UserNotFoundError()
+    customer_phone, user_month_sum_limit = customer
 
-    limit_check = await check_user_month_orders_limit(session, client_id, price)
+    limit_check = await check_user_month_orders_limit(
+        session,
+        client_id,
+        price,
+        month_sum_limit=user_month_sum_limit,
+    )
     if limit_check["is_limit_exceeded"]:
         raise MonthOrdersLimitExceededError(details=limit_check)
 
@@ -600,7 +610,14 @@ async def check_user_month_orders_limit(
     session: AsyncSession,
     user_id: int,
     price: Decimal,
+    month_sum_limit: Decimal | None = None,
 ) -> dict[str, bool | str]:
+    if month_sum_limit is None:
+        user_limit = await session.scalar(select(User.month_sum_limit).where(User.id == user_id))
+        if user_limit is None:
+            raise UserNotFoundError()
+        month_sum_limit = user_limit
+
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     next_month = (
@@ -617,7 +634,7 @@ async def check_user_month_orders_limit(
         )
     )
     current_month_sum = month_sum or Decimal("0")
-    delta = current_month_sum + price - MONTH_SUM_LIMIT_PER_USER
+    delta = current_month_sum + price - month_sum_limit
 
     return {
         "is_limit_exceeded": delta > 0,
