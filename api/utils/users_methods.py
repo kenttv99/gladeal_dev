@@ -1,4 +1,6 @@
-from sqlalchemy import delete, exists, insert, or_, select, update
+from datetime import datetime, timezone
+
+from sqlalchemy import delete, exists, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates
@@ -7,11 +9,14 @@ from api.exceptions import (
     PhoneNumberAlreadyExistsError,
     UserBannedError,
     UserNotFoundError,
+    UserPersondocRequiredError,
 )
+from api.payments.payments_methods import check_identification_status
+from api.schemas.schemas_v1 import UserKYCResponse
 from database.config import AsyncSessionLocal
 from database.models.notifications import Notification
 from database.models.orders import Order, OrderStatusHistory
-from database.models.users import User
+from database.models.users import KYCData, User
 
 
 ACCOUNT_DELETION_BLOCKING_STATUSES = (
@@ -153,3 +158,81 @@ async def reset_phone_number(user_id: int, phone_number: str) -> None:
             if "uq_users_phone_number" in str(exc.orig):
                 raise PhoneNumberAlreadyExistsError() from exc
             raise
+
+
+async def verify_user_kyc(user_id: int) -> UserKYCResponse:
+    """Выполняет идентификацию пользователя через Paygine и сохраняет результат в KYCData."""
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            user = await session.scalar(select(User).where(User.id == user_id))
+            if user is None:
+                raise UserNotFoundError()
+            if not user.persondoc_number or not user.birth_date:
+                raise UserPersondocRequiredError()
+
+            birth_date_str = user.birth_date.strftime("%Y.%m.%d")
+
+            kyc_result = await check_identification_status(
+                first_name=user.first_name,
+                patronymic=user.patronymic,
+                last_name=user.last_name,
+                birth_date=birth_date_str,
+                persondoc_number=user.persondoc_number,
+            )
+            data = kyc_result.get("data", {}) if isinstance(kyc_result, dict) else {}
+            status = data.get("status")
+            identification_level = data.get("identification_level")
+            persondoc_result = data.get("persondoc_result")
+            persondoc_fail_reason = data.get("persondoc_fail_reason")
+
+            is_approved = (
+                status == "APPROVED"
+                and str(identification_level) in ("20", "40")
+            )
+            kyc_level_str = str(identification_level) if identification_level is not None else None
+
+            now = datetime.now(timezone.utc)
+            kyc_entry = await session.scalar(select(KYCData).where(KYCData.user_id == user_id))
+            if kyc_entry is None:
+                kyc_entry = KYCData(
+                    user_id=user_id,
+                    kyc_level=kyc_level_str,
+                    kyc_status=is_approved,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(kyc_entry)
+            else:
+                kyc_entry.kyc_level = kyc_level_str
+                kyc_entry.kyc_status = is_approved
+                kyc_entry.updated_at = now
+
+            await session.flush()
+
+            return UserKYCResponse(
+                user_id=user_id,
+                kyc_status=bool(kyc_entry.kyc_status),
+                kyc_level=kyc_entry.kyc_level,
+                provider_status=status,
+                persondoc_result=str(persondoc_result) if persondoc_result is not None else None,
+                identification_level=kyc_level_str,
+                persondoc_fail_reason=str(persondoc_fail_reason) if persondoc_fail_reason is not None else None,
+                updated_at=now,
+            )
+
+
+async def get_user_kyc_data(user_id: int) -> UserKYCResponse:
+    """Получает текущие KYC данные пользователя из базы данных."""
+    async with AsyncSessionLocal() as session:
+        user = await session.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            raise UserNotFoundError()
+
+        kyc_entry = await session.scalar(select(KYCData).where(KYCData.user_id == user_id))
+        return UserKYCResponse(
+            user_id=user_id,
+            kyc_status=bool(kyc_entry.kyc_status) if kyc_entry else False,
+            kyc_level=kyc_entry.kyc_level if kyc_entry else None,
+            updated_at=kyc_entry.updated_at if kyc_entry else None,
+        )
+

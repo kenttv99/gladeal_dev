@@ -63,6 +63,19 @@ class AccessTokenRefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class UserKYCResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    user_id: int
+    kyc_status: bool
+    kyc_level: str | None = None
+    provider_status: str | None = None
+    persondoc_result: str | None = None
+    identification_level: str | None = None
+    persondoc_fail_reason: str | None = None
+    updated_at: datetime | None = None
+
+
 class AdminUserResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 

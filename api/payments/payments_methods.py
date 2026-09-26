@@ -7,6 +7,7 @@ from api.payments.utils.register_deal_methods import (
     create_deposit_deal,
     create_payout_deal,
 )
+from api.payments.utils.identification_status_methods import request_identification_status
 from api.payments.utils.refund_money_methods import refund_registered_deal
 from api.payments.utils.reverse_paymented_deal_methods import reverse_registered_deal
 from api.schemas.schemas_v1 import (
@@ -76,3 +77,23 @@ async def reverse_paymented_deal(
 async def get_balance() -> dict[str, object]:
     """Получаем баланс кубышки."""
     return await get_sd_balance()
+
+
+async def check_identification_status(
+    first_name: str,
+    patronymic: str,
+    last_name: str,
+    birth_date: str,
+    persondoc_number: str,
+    mode: int = 1,
+) -> dict[str, object]:
+    """Проверяем KYC статус физического лица в ПЦ Paygine."""
+    return await request_identification_status(
+        first_name=first_name,
+        patronymic=patronymic,
+        last_name=last_name,
+        birth_date=birth_date,
+        persondoc_number=persondoc_number,
+        mode=mode,
+    )
+

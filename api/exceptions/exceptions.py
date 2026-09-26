@@ -51,6 +51,11 @@ class UserVerificationRequiredError(BaseAPIException):
     error_code = "USER_VERIFICATION_REQUIRED"
 
 
+class UserPersondocRequiredError(BaseAPIException):
+    status_code = 400
+    error_code = "USER_PERSONDOC_REQUIRED"
+
+
 
 class OrderNotFoundError(BaseAPIException):
     status_code = 404

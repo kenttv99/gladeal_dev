@@ -82,6 +82,7 @@ OpenAPI JSON основного API:
 ## Роутеры
 
 - `/api/v1/auth` - регистрация, авторизация и управление аккаунтом.
+- `/api/v1/users` - профиль и KYC верификация пользователя.
 - `/api/v1/client` - действия пользователя как заказчика.
 - `/api/v1/performer` - действия пользователя как исполнителя.
 - `/v1/paygine` - webhook-и и redirect-ы Paygine в отдельном приложении.
@@ -315,6 +316,33 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 2. `POST /api/v1/auth/verification-code/verify` с `verification_scope=reset_phone_number`.
 
 Оба verification endpoint для этого scope вызываются без авторизации. Основной `POST /api/v1/auth/reset-phone-number` требует access token, повторно проверяет доступность номера и потребляет одноразовый Redis-флаг `sms_calls:verified:reset_phone_number:phone:{phone}`.
+
+## KYC endpoints (Идентификация пользователя)
+
+- `POST /api/v1/users/kyc/verify` (также доступен по пути `/api/v1/auth/kyc/verify`) - запускает идентификацию пользователя в Paygine по его паспортным данным (`persondoc_number`, `birth_date`, `first_name`, `last_name`, `patronymic`).
+- `GET /api/v1/users/kyc/status` (также доступен по пути `/api/v1/auth/kyc/status`) - возвращает сохраненный статус верификации пользователя.
+
+Оба эндпоинта требуют авторизации (`Bearer access_token`).
+Если у пользователя не заполнены серия и номер паспорта (`persondoc_number`) или дата рождения (`birth_date`), возвращается ошибка `USER_PERSONDOC_REQUIRED` (HTTP 400).
+
+Ответ `UserKYCResponse`:
+```json
+{
+  "user_id": 1,
+  "kyc_status": true,
+  "kyc_level": "40",
+  "provider_status": "APPROVED",
+  "persondoc_result": "300",
+  "identification_level": "40",
+  "persondoc_fail_reason": null,
+  "updated_at": "2026-09-26T12:00:00Z"
+}
+```
+Значения полей провайдера:
+- `kyc_status`: `true`, если `provider_status == "APPROVED"` и `kyc_level` равен `"20"` или `"40"`.
+- `identification_level` / `kyc_level`: `"40"` (полная идентификация), `"20"` (упрощенная идентификация), `"0"` (идентификация отсутствует).
+- `persondoc_result`: `"300"` (паспорт действителен), `"301"` (паспорт недействителен), `"302"` (паспорт не найден).
+- `persondoc_fail_reason`: `"601"` (не найден в реестре), `"602"` (числится недействительным), `"604"` (данные не соответствуют).
 
 ## Client endpoints
 

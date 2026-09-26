@@ -9,6 +9,7 @@ from api.schemas.schemas_v1 import (
     PhoneVerificationCodeVerifyRequest,
     RegisterUserRequest,
     ResetPhoneNumberRequest,
+    UserKYCResponse,
 )
 from api.sms_calls.sms_calls_methods import (
     consume_phone_sms_call_verification,
@@ -31,8 +32,10 @@ from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
     ensure_phone_number_available,
+    get_user_kyc_data,
     register_user,
     reset_phone_number as reset_phone_number_method,
+    verify_user_kyc,
 )
 
 
@@ -197,3 +200,26 @@ async def verify_verification_code(
             PHONE_VERIFICATION_SCOPES[data.verification_scope],
         )
     }
+
+
+kyc_router = APIRouter()
+
+
+@router.post("/kyc/verify", response_model=UserKYCResponse)
+@kyc_router.post("/kyc/verify", response_model=UserKYCResponse)
+async def kyc_verify(
+    authorized_user_id: int = Depends(authorize_user),
+) -> UserKYCResponse:
+    """Запускает процесс KYC идентификации пользователя через Paygine."""
+    return await verify_user_kyc(authorized_user_id)
+
+
+@router.get("/kyc/status", response_model=UserKYCResponse)
+@kyc_router.get("/kyc/status", response_model=UserKYCResponse)
+async def kyc_status(
+    authorized_user_id: int = Depends(authorize_user),
+) -> UserKYCResponse:
+    """Возвращает текущий статус KYC идентификации пользователя."""
+    return await get_user_kyc_data(authorized_user_id)
+
+

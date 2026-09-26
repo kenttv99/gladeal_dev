@@ -90,3 +90,33 @@ class NotificationStatuses(Enum):
     READ = "read"
     ARCHIVED = "archived"
     FAILED = "failed"
+
+
+###
+# KYC / Идентификация физлиц (Paygine)
+###
+
+class IdentificationStatuses(Enum):
+    PENDING = "PENDING"
+    SENT = "SENT"
+    APPROVED = "APPROVED"
+    FORMAT_ERROR = "FORMAT_ERROR"
+    INN_NOT_FOUND = "INN_NOT_FOUND"
+
+
+class IdentificationPersondocResult(Enum):
+    VALIDATED = "300"
+    VALIDATION_FAILED = "301"
+    NOT_FOUND = "302"
+
+
+class IdentificationLevel(Enum):
+    VALID_INN_FOUND = "40"
+    VALID_NO_INN = "20"
+    INVALID = "0"
+
+
+class IdentificationFailReason(Enum):
+    EXPIRED = "601"
+    REPLACED = "602"
+    LOST_OR_STOLEN = "604"

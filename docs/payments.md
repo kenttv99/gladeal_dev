@@ -24,6 +24,7 @@
 - `api/payments/utils/reverse_paymented_deal_methods.py` - разморозка (холдирование) средств без комиссии.
 - `api/payments/utils/cancle_unpayment_deal_methods.py` - перевод неоплаченной сделки в `EXPIRED`.
 - `api/payments/utils/refund_money_methods.py` - регистрация возврата средств заказчику.
+- `api/payments/utils/identification_status_methods.py` - проверка идентификации (KYC) физических лиц.
 - `api/payments/payments_methods.py` - публичный фасад для API и воркеров.
 - `api/schemas/schemas_v1.py` - payment request/response модели.
 - `api/servers/payments.py` - отдельное приложение для webhook-ов Paygine.
@@ -148,12 +149,42 @@
 
 Все эти методы используют общий `httpx.AsyncClient` и парсят ответ через `parse_paygine_response`.
 
+## Идентификация физлиц (KYC)
+
+Метод `check_identification_status` (`request_identification_status` в `api/payments/utils/identification_status_methods.py`) выполняет проверку паспортных данных физического лица через партнерский шлюз Paygine:
+
+- Эндпоинт: `POST /webapi/p2pmarket/IdentificationStatus`
+- Параметры запроса:
+  - `mode`: `1` (проверка данных)
+  - `sector`: идентификатор сектора ТСП (`PAYGINE_SECTOR`)
+  - `first_name`: имя физического лица (до 30 символов)
+  - `patronymic`: отчество физического лица (до 30 символов)
+  - `last_name`: фамилия физического лица (до 30 символов)
+  - `birth_date`: дата рождения в формате `ГГГГ.ММ.ДД` (например, `2000.09.12`)
+  - `persondoc_number`: серия и номер паспорта (до 20 символов)
+  - `signature`: цифровая подпись на основе полей `(sector, first_name, patronymic, last_name, birth_date, persondoc_number)` и пароля сектора.
+
+Ключевые поля ответа Paygine:
+- `status`:
+  - `APPROVED` — проверка успешно пройдена
+  - `PENDING` — запрос в очереди на проверку
+  - `SENT` — ожидание ответа от поставщика данных
+  - `FORMAT_ERROR` — ошибка в формате переданных данных
+  - `INN_NOT_FOUND` — не удалось найти ИНН по переданным данным
+- `identification_level`: уровень идентификации (`40` — полная, `20` — упрощенная, `0` — отсутствует)
+- `persondoc_result`: статус проверки паспорта (`300` — действителен, `301` — недействителен, `302` — не найден)
+- `persondoc_fail_reason`: причина отказа (`601` — не найден в реестре, `602` — числится недействительным, `604` — данные не соответствуют)
+
+Результаты проверки сохраняются в таблицу `kyc_data` (`kyc_status = True` при `status == "APPROVED"` и `identification_level` в `("20", "40")`).
+
 ## Взаимодействие с заказами
 
 Платежный слой не является набором HTTP-эндпоинтов. Он вызывается из:
 
 - `api/utils/orders_methods.py` - создание сделки, подтверждение клиентом, отказ исполнителя и soft decline.
+- `api/utils/users_methods.py` - верификация пользователя и получение статуса KYC.
 - `workers/utils/order_expire_methods.py` - обработка просроченных сделок.
 - `api/webhooks/v1/order_status_webhook.py` - обработка callback-ов Paygine.
 
 Именно через этот слой в `orders_payment_data` попадают `paygine_payment_operation_id`, `paygine_payout_operation_id`, `paygine_revoked_operation_id`, статусы операций и сроки их истечения.
+
