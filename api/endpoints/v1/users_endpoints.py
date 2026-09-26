@@ -67,8 +67,11 @@ async def register(user: RegisterUserRequest):
 
     return await register_user(
         first_name=user.first_name,
+        patronymic=user.patronymic,
         last_name=user.last_name,
         phone_number=user.phone_number,
+        birth_date=user.birth_date,
+        persondoc_number=user.persondoc_number,
         ppd=user.ppd,
     )
 
@@ -77,10 +80,14 @@ async def register_without_sms(user: RegisterUserRequest):
     '''Запасной ендпоинт для регистрации без смс'''
     return await register_user(
         first_name=user.first_name,
+        patronymic=user.patronymic,
         last_name=user.last_name,
         phone_number=user.phone_number,
+        birth_date=user.birth_date,
+        persondoc_number=user.persondoc_number,
         ppd=user.ppd,
     )
+
 
 
 @router.post("/delete-account")

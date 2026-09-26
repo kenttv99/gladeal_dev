@@ -19,9 +19,13 @@ from api.enums.enums_v1 import (
 
 class RegisterUserRequest(BaseModel):
     first_name: str
+    patronymic: str
     last_name: str
     phone_number: str
+    birth_date: datetime
+    persondoc_number: str | None = None
     ppd: bool = False
+
 
 
 class LoginUserRequest(BaseModel):

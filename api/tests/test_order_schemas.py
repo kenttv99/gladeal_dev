@@ -5,12 +5,15 @@ from decimal import Decimal
 import unittest
 
 from api.enums.enums_v1 import OrderStates, OrderTypes
+from api.exceptions.exceptions import OrderPriceLimitExceededError, UserVerificationRequiredError
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
     AdminOrderStatusHistoryResponse,
     CreateOrderRequest,
     OrderInfoResponse,
+    RegisterUserRequest,
 )
+from api.utils.help_orders_method import ensure_order_price_and_user_verified
 from database.models.orders import Order
 
 
@@ -124,6 +127,73 @@ class OrderSchemasTest(unittest.TestCase):
         self.assertEqual(admin_res.order_type, "free_deal")
         self.assertEqual(admin_res.task_free_deal, "Write code")
 
+    def test_register_user_request_schema(self):
+        now = datetime.now(timezone.utc)
+        data = {
+            "first_name": "Иван",
+            "patronymic": "Иванович",
+            "last_name": "Иванов",
+            "phone_number": "+79991234567",
+            "birth_date": now,
+            "persondoc_number": "1234567890",
+            "ppd": True,
+        }
+        req = RegisterUserRequest.model_validate(data)
+        self.assertEqual(req.first_name, "Иван")
+        self.assertEqual(req.patronymic, "Иванович")
+        self.assertEqual(req.birth_date, now)
+        self.assertEqual(req.persondoc_number, "1234567890")
+        self.assertTrue(req.ppd)
+
+
+class OrderVerificationPriceLimitTest(unittest.IsolatedAsyncioTestCase):
+    async def test_order_price_under_threshold_passes_without_kyc(self):
+        class FakeSession:
+            async def scalar(self, statement):
+                return False
+
+        await ensure_order_price_and_user_verified(
+            session=FakeSession(),
+            user_id=1,
+            price=Decimal("10000.00"),
+        )
+
+    async def test_order_price_above_threshold_without_kyc_fails(self):
+        class FakeSession:
+            async def scalar(self, statement):
+                return False
+
+        with self.assertRaises(UserVerificationRequiredError):
+            await ensure_order_price_and_user_verified(
+                session=FakeSession(),
+                user_id=1,
+                price=Decimal("20000.00"),
+            )
+
+    async def test_order_price_above_threshold_with_kyc_passes(self):
+        class FakeSession:
+            async def scalar(self, statement):
+                return True
+
+        await ensure_order_price_and_user_verified(
+            session=FakeSession(),
+            user_id=1,
+            price=Decimal("20000.00"),
+        )
+
+    async def test_order_price_above_max_limit_raises_error(self):
+        class FakeSession:
+            async def scalar(self, statement):
+                return True
+
+        with self.assertRaises(OrderPriceLimitExceededError):
+            await ensure_order_price_and_user_verified(
+                session=FakeSession(),
+                user_id=1,
+                price=Decimal("150000.00"),
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -8,8 +8,8 @@ from api.payments.config import PAYGINE_SECTOR
 from api.payments.payments_methods import reverse_paymented_deal
 from api.payments.utils.reverse_paymented_deal_methods import (
     build_reverse_paymented_deal_payload,
-    post_reverse_paymented_deal,
 )
+
 
 
 class ReversePaymentedDealTest(unittest.IsolatedAsyncioTestCase):

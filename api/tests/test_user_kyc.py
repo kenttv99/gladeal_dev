@@ -10,14 +10,6 @@ from api.utils.users_methods import get_user_kyc_data, verify_user_kyc
 from database.models.users import KYCData, User
 
 
-class FakeScalarResult:
-    def __init__(self, value):
-        self._value = value
-
-    def scalar_one_or_none(self):
-        return self._value
-
-
 class FakeSession:
     def __init__(self, user=None, kyc_entry=None):
         self.user = user
@@ -79,6 +71,20 @@ class UserKYCTest(unittest.IsolatedAsyncioTestCase):
             patronymic="Иванович",
             last_name="Иванов",
             birth_date=None,
+            persondoc_number="1234567890",
+        )
+        fake_session = FakeSession(user=user)
+        with patch("api.utils.users_methods.AsyncSessionLocal", return_value=fake_session):
+            with self.assertRaises(UserPersondocRequiredError):
+                await verify_user_kyc(user_id=1)
+
+    async def test_verify_user_kyc_missing_patronymic_raises_error(self):
+        user = User(
+            id=1,
+            first_name="Иван",
+            patronymic="",
+            last_name="Иванов",
+            birth_date=datetime(2000, 9, 12, tzinfo=timezone.utc),
             persondoc_number="1234567890",
         )
         fake_session = FakeSession(user=user)

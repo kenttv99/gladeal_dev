@@ -29,8 +29,12 @@
 
 - `id`
 - `first_name`
+- `patronymic`
 - `last_name`
 - `phone_number`
+- `birth_date`
+- `persondoc_number`
+- `month_sum_limit`
 - `ppd`
 - `is_banned`
 - `ban_reason`
@@ -42,10 +46,13 @@
 Особенности:
 
 - `phone_number` уникален.
+- `persondoc_number` уникален, используется для прохождения KYC.
+- `patronymic` и `birth_date` обязательны при регистрации.
+- `month_sum_limit` задает месячный лимит суммы сделок пользователя (по умолчанию 200 000.00).
 - `is_banned` отмечает блокировку пользователя.
 - `ban_reason` и `banned_at` хранят метаданные блокировки.
 - `role` использует `UserRoles`.
-- `id` связан с `orders.client_id`, `orders.performer_id`, `notifications.user_id` и `user_refresh_tokens.user_id`.
+- `id` связан с `orders.client_id`, `orders.performer_id`, `kyc_data.user_id`, `notifications.user_id` и `user_refresh_tokens.user_id`.
 
 ### `admins`
 
@@ -115,10 +122,16 @@ Refresh token-ы администраторов.
 - `id`
 - `client_id`
 - `performer_id`
+- `order_type`
 - `title`
-- `conditions`
-- `result_requirements`
+- `source_of_truth`
+- `site_or_app`
+- `customer_identity`
 - `violation_proof_requirements`
+- `additional_requirements`
+- `contact_free_deal`
+- `task_free_deal`
+- `how_to_proove_free_deal`
 - `slug`
 - `price`
 - `status`
@@ -131,6 +144,9 @@ Refresh token-ы администраторов.
 Особенности:
 
 - `client_id` и `performer_id` ссылаются на `users.id`.
+- `order_type` использует `OrderTypes` (`subscriptions`, `tickets_and_reservations`, `free_deal`).
+- `violation_proof_requirements` хранит склеенные запятой пункты требований к доказательствам нарушений.
+- `contact_free_deal`, `task_free_deal`, `how_to_proove_free_deal` заполняются для свободных сделок (`free_deal`).
 - `status` использует `OrderStates`, включая `awaiting_performer_payout` и `awaiting_client_payout`.
 - `checked_by_worker_at` и `expire_in` используются воркером истечения сделок.
 - `completed_at` заполняется при переходе в `awaiting_client_confirmation` и в закрытые статусы.
@@ -159,6 +175,7 @@ Refresh token-ы администраторов.
 - `expire_payout_at`
 - `payout_completed_at`
 - `payment_complete_at`
+- `payment_authorized_at`
 - `revoked_at`
 - `created_at`
 - `updated_at`
@@ -175,7 +192,7 @@ Refresh token-ы администраторов.
 - `paygine_payout_operation_id` создается после подтверждения оплаты клиентом или при обработке просроченной сделки.
 - `paygine_revoked_operation_id` используется для возвратных операций.
 - `expire_payment_at` и `expire_payout_at` хранят дедлайны Paygine-операций.
-- `payment_complete_at`, `payout_completed_at` и `revoked_at` фиксируют фактическое время завершения операций.
+- `payment_complete_at`, `payment_authorized_at`, `payout_completed_at` и `revoked_at` фиксируют фактическое время завершения или авторизации операций.
 
 ### `order_status_history`
 
@@ -219,6 +236,40 @@ Refresh token-ы администраторов.
 - `type` использует `NotificationTypes`.
 - `status` использует `NotificationStatuses`.
 
+### `kyc_data`
+
+KYC-данные и статус верификации пользователя.
+
+Поля:
+
+- `id`
+- `user_id`
+- `kyc_level`
+- `kyc_status`
+- `created_at`
+- `updated_at`
+
+Особенности:
+
+- `user_id -> users.id` с `ON DELETE CASCADE`.
+- `user_id` уникален (одна запись верификации на пользователя).
+- `kyc_status` — булевый флаг (`true`, если верификация одобрена).
+- `kyc_level` хранит уровень идентификации (`0`, `20`, `40`).
+
+### `offer_versions`
+
+Версии оферты платформы.
+
+Поля:
+
+- `id`
+- `version`
+- `created_at`
+
+Особенности:
+
+- хранит историю опубликованных версий оферты.
+
 ## Связи
 
 - `orders.client_id -> users.id`
@@ -226,6 +277,7 @@ Refresh token-ы администраторов.
 - `orders_payment_data.order_id -> orders.id`
 - `order_status_history.order_id -> orders.id`
 - `order_status_history.changed_by_user_id -> users.id`
+- `kyc_data.user_id -> users.id`
 - `notifications.user_id -> users.id`
 - `user_refresh_tokens.user_id -> users.id`
 - `admin_refresh_tokens.admin_id -> admins.id`
@@ -238,6 +290,7 @@ Enum-поля хранятся как `VARCHAR + CHECK constraint`, без Postg
 
 - `UserRoles`: `client`, `performer`
 - `AdminRoles`: `superuser`, `admin`, `support`
+- `OrderTypes`: `subscriptions`, `tickets_and_reservations`, `free_deal`
 - `OrderStates`: статусы сделок, включая `awaiting_performer_payout` и `awaiting_client_payout`
 - `OrderPaymentStates`: `registered`, `authorized`, `completed`, `blocked`, `canceled`, `expired`
 - `NotificationTypes`: `order`, `review`, `promotion`, `news`

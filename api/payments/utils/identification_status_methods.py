@@ -29,12 +29,13 @@ def build_identification_status_payload(
     payload: dict[str, object] = {
         "mode": mode,
         "sector": PAYGINE_SECTOR,
-        "first_name": first_name.strip()[:30],
-        "patronymic": patronymic.strip()[:30],
-        "last_name": last_name.strip()[:30],
-        "birth_date": birth_date.strip()[:10],
-        "persondoc_number": persondoc_number.strip()[:20],
+        "first_name": (first_name or "").strip()[:30],
+        "patronymic": (patronymic or "").strip()[:30],
+        "last_name": (last_name or "").strip()[:30],
+        "birth_date": (birth_date or "").strip()[:10],
+        "persondoc_number": (persondoc_number or "").strip()[:20],
     }
+
     payload["signature"] = build_signature(
         payload[field] for field in IDENTIFICATION_STATUS_SIGNATURE_FIELDS
     )

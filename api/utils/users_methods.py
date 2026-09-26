@@ -31,15 +31,14 @@ ACCOUNT_DELETION_BLOCKING_STATUSES = (
 
 async def register_user(
     first_name: str,
+    patronymic: str,
     last_name: str,
     phone_number: str,
+    birth_date: datetime,
+    persondoc_number: str | None = None,
     ppd: bool = False,
 ) -> User:
-    
-    """
-    
-    
-    """
+    """Регистрирует нового пользователя в системе."""
     async with AsyncSessionLocal() as session:
         try:
             async with session.begin():
@@ -47,8 +46,11 @@ async def register_user(
                     insert(User)
                     .values(
                         first_name=first_name,
+                        patronymic=patronymic,
                         last_name=last_name,
                         phone_number=phone_number,
+                        birth_date=birth_date,
+                        persondoc_number=persondoc_number,
                         ppd=ppd,
                     )
                     .returning(User)
@@ -167,7 +169,13 @@ async def verify_user_kyc(user_id: int) -> UserKYCResponse:
             user = await session.scalar(select(User).where(User.id == user_id))
             if user is None:
                 raise UserNotFoundError()
-            if not user.persondoc_number or not user.birth_date:
+            if (
+                not user.first_name
+                or not user.patronymic
+                or not user.last_name
+                or not user.birth_date
+                or not user.persondoc_number
+            ):
                 raise UserPersondocRequiredError()
 
             birth_date_str = user.birth_date.strftime("%Y.%m.%d")

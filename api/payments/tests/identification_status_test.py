@@ -9,9 +9,9 @@ from api.payments.auth_methods import build_signature
 from api.payments.config import PAYGINE_SECTOR
 from api.payments.payments_methods import check_identification_status
 from api.payments.utils.identification_status_methods import (
-    IDENTIFICATION_STATUS_SIGNATURE_FIELDS,
     build_identification_status_payload,
 )
+
 
 
 REAL_IDENTIFICATION_STATUS_DATA = {

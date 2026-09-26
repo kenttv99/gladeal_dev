@@ -26,7 +26,7 @@ from api.exceptions import (
 )
 from database.models.orders import Order, OrderStatusHistory
 from database.models.payments import OrderPaymentData
-from database.models.users import User
+from database.models.users import KYCData, User
 
 
 DEAL_SCREEN_PATH = "active_deal"
@@ -201,13 +201,7 @@ async def create_order_record(
         raise UserNotFoundError()
     customer_phone, user_month_sum_limit = customer
 
-    if not check_order_price_limit(price):
-        raise UserVerificationRequiredError(
-            details={
-                "price": str(price),
-                "threshold": str(VERIFICATION_REQUIRED_PRICE_THRESHOLD),
-            }
-        )
+    await ensure_order_price_and_user_verified(session, client_id, price)
 
     limit_check = await check_user_month_orders_limit(
         session,
@@ -715,12 +709,15 @@ async def set_softdeclined_order_status(
     )
 
 
-def check_order_price_limit(price: Decimal) -> bool:
+async def ensure_order_price_and_user_verified(
+    session: AsyncSession,
+    user_id: int,
+    price: Decimal,
+) -> None:
     """
-    Проверяет сумму сделки:
-    - до 15 000 руб. — пропускается (True);
-    - от 15 000 до 100 000 руб. — останавливается (False, заглушка перед верификацией);
-    - свыше 100 000 руб. — исключение OrderPriceLimitExceededError.
+    Проверяет сумму сделки и статус верификации пользователя:
+    - свыше MAX_SINGLE_ORDER_PRICE — исключение OrderPriceLimitExceededError;
+    - от VERIFICATION_REQUIRED_PRICE_THRESHOLD — требуется успешная верификация KYC (kyc_status == True).
     """
     if price > MAX_SINGLE_ORDER_PRICE:
         raise OrderPriceLimitExceededError(
@@ -729,7 +726,18 @@ def check_order_price_limit(price: Decimal) -> bool:
                 "max_price": str(MAX_SINGLE_ORDER_PRICE),
             }
         )
-    return price < VERIFICATION_REQUIRED_PRICE_THRESHOLD
+
+    if price >= VERIFICATION_REQUIRED_PRICE_THRESHOLD:
+        kyc_status = await session.scalar(
+            select(KYCData.kyc_status).where(KYCData.user_id == user_id)
+        )
+        if not kyc_status:
+            raise UserVerificationRequiredError(
+                details={
+                    "price": str(price),
+                    "threshold": str(VERIFICATION_REQUIRED_PRICE_THRESHOLD),
+                }
+            )
 
 
 async def check_user_month_orders_limit(

@@ -214,18 +214,24 @@ Redis-ключи разделены по сценарию:
 Регистрация сохраняет:
 
 - `first_name`
+- `patronymic`
 - `last_name`
 - `phone_number`
+- `birth_date`
+- `persondoc_number` (опционально)
 - `ppd`
 
 `POST /api/v1/auth/register` принимает:
 
 ```json
 {
-  "first_name": "Ivan",
-  "last_name": "Ivanov",
+  "first_name": "Иван",
+  "patronymic": "Иванович",
+  "last_name": "Иванов",
   "phone_number": "79000000001",
-  "ppd": false
+  "birth_date": "2000-01-15T00:00:00Z",
+  "persondoc_number": "1234567890",
+  "ppd": true
 }
 ```
 
@@ -323,7 +329,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `GET /api/v1/users/kyc/status` (также доступен по пути `/api/v1/auth/kyc/status`) - возвращает сохраненный статус верификации пользователя.
 
 Оба эндпоинта требуют авторизации (`Bearer access_token`).
-Если у пользователя не заполнены серия и номер паспорта (`persondoc_number`) или дата рождения (`birth_date`), возвращается ошибка `USER_PERSONDOC_REQUIRED` (HTTP 400).
+Если у пользователя не заполнены ФИО (`first_name`, `patronymic`, `last_name`), дата рождения (`birth_date`) или серия и номер паспорта (`persondoc_number`), возвращается ошибка `USER_PERSONDOC_REQUIRED` (HTTP 400).
 
 Ответ `UserKYCResponse`:
 ```json
@@ -374,7 +380,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
   - `task_free_deal` (опционально, для свободной сделки) - описание задачи;
   - `how_to_proove_free_deal` (опционально, для свободной сделки) - что докажет выполнение задачи;
 - проверяет существование пользователя;
-- проверяет сумму сделки (до 15 000 руб. — без ограничений; от 15 000 до 100 000 руб. — требует верификации с ошибкой `USER_VERIFICATION_REQUIRED`; свыше 100 000 руб. — запрещено с ошибкой `ORDER_PRICE_LIMIT_EXCEEDED`);
+- проверяет сумму сделки и статус верификации заказчика (до 15 000 руб. — без ограничений; от 15 000 до 100 000 руб. — требует подтвержденной KYC-верификации в `kyc_data` с `kyc_status == true`, иначе возвращается ошибка `USER_VERIFICATION_REQUIRED`; свыше 100 000 руб. — запрещено с ошибкой `ORDER_PRICE_LIMIT_EXCEEDED`);
 - проверяет месячный лимит суммы сделок через `User.month_sum_limit`;
 - генерирует уникальный `slug`;
 - создает сделку в статусе `awaiting_performer`;
