@@ -67,6 +67,42 @@ class AccessTokenRefreshResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class AuthPreTwoFactorResponse(BaseModel):
+    two_factor_required: bool = True
+    pre_auth_token: str
+    token_type: str = "pre_auth"
+
+
+class TwoFactorSetupResponse(BaseModel):
+    secret: str
+    otpauth_url: str
+    qr_code_base64: str
+    backup_codes: list[str]
+
+
+class TwoFactorCodeRequest(BaseModel):
+    code: str
+
+
+class TwoFactorVerifyRequest(BaseModel):
+    pre_auth_token: str
+    code: str
+
+
+class TwoFactorDisableUserRequest(BaseModel):
+    code: str
+
+
+class TwoFactorDisableAdminRequest(BaseModel):
+    password: str
+    code: str
+
+
+class TwoFactorStatusResponse(BaseModel):
+    is_two_factor_enabled: bool
+    backup_codes_remaining: int
+
+
 class UserKYCResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 

@@ -35,6 +35,9 @@
 - `birth_date`
 - `persondoc_number`
 - `month_sum_limit`
+- `two_factor_secret`
+- `is_two_factor_enabled`
+- `two_factor_backup_codes`
 - `ppd`
 - `is_banned`
 - `ban_reason`
@@ -49,6 +52,9 @@
 - `persondoc_number` уникален, используется для прохождения KYC.
 - `patronymic` и `birth_date` обязательны при регистрации.
 - `month_sum_limit` задает месячный лимит суммы сделок пользователя (по умолчанию 200 000.00).
+- `two_factor_secret` хранит 32-символьный Base32 секрет TOTP.
+- `is_two_factor_enabled` активирует двухфакторную аутентификацию при входе.
+- `two_factor_backup_codes` хранит JSON-массив хэшей одноразовых резервных кодов.
 - `is_banned` отмечает блокировку пользователя.
 - `ban_reason` и `banned_at` хранят метаданные блокировки.
 - `role` использует `UserRoles`.
@@ -65,6 +71,9 @@
 - `last_name`
 - `email`
 - `password_hash`
+- `two_factor_secret`
+- `is_two_factor_enabled`
+- `two_factor_backup_codes`
 - `role`
 - `created_at`
 - `updated_at`
@@ -73,6 +82,9 @@
 
 - `email` уникален.
 - `password_hash` хранит Argon2id-хеш пароля администратора.
+- `two_factor_secret` хранит 32-символьный Base32 секрет TOTP администратора.
+- `is_two_factor_enabled` активирует обязательный второй фактор при входе администратора.
+- `two_factor_backup_codes` хранит JSON-массив хэшей одноразовых резервных кодов администратора.
 - `role` использует `AdminRoles`.
 
 ### `user_refresh_tokens`

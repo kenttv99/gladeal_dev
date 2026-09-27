@@ -10,6 +10,9 @@ from api.exceptions import (
     InvalidCredentialsError,
     OrderNotFoundError,
     OrderPaymentInvalidStatusError,
+    TwoFactorAlreadyEnabledError,
+    TwoFactorCodeInvalidError,
+    TwoFactorNotEnabledError,
     ValidationError,
 )
 from api.payments.payments_methods import refund_money, register_payout_deal
@@ -21,8 +24,26 @@ from api.schemas.schemas_v1 import (
     AdminUserBanResponse,
     AdminUserResponse,
     AdminUsersResponse,
+    AuthAdminResponse,
     RefundMoneyPaymentRequest,
     RegisterPayoutDealPaymentRequest,
+    TwoFactorSetupResponse,
+    TwoFactorStatusResponse,
+)
+from api.utils.jwt_methods import (
+    create_admin_refresh_token,
+    decode_pre_auth_token,
+    generate_admin_access_token,
+)
+from api.utils.two_factor_methods import (
+    generate_backup_codes,
+    generate_qr_code_base64,
+    generate_totp_uri,
+    generate_two_factor_secret,
+    hash_backup_code,
+    mark_totp_code_used,
+    verify_and_burn_backup_code,
+    verify_totp_code,
 )
 from api.utils.help_orders_method import (
     add_order_status_history,
@@ -527,3 +548,124 @@ async def change_admin_password_by_email(email: str, password: str) -> int:
             if admin_id is None:
                 raise ValueError("Admin with this email does not exist")
             return admin_id
+
+
+async def is_admin_2fa_enabled(admin_id: int) -> bool:
+    async with AsyncSessionLocal() as session:
+        return bool(
+            await session.scalar(
+                select(Admin.is_two_factor_enabled).where(Admin.id == admin_id)
+            )
+        )
+
+
+async def setup_admin_2fa(admin_id: int) -> TwoFactorSetupResponse:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            admin = await session.scalar(select(Admin).where(Admin.id == admin_id))
+            if admin is None:
+                raise InvalidCredentialsError()
+            if admin.is_two_factor_enabled:
+                raise TwoFactorAlreadyEnabledError()
+
+            secret = generate_two_factor_secret()
+            backup_codes = generate_backup_codes(8)
+            hashed_backup_codes = [hash_backup_code(c) for c in backup_codes]
+
+            admin.two_factor_secret = secret
+            admin.two_factor_backup_codes = hashed_backup_codes
+            admin.is_two_factor_enabled = False
+
+            otpauth_url = generate_totp_uri(secret, account_name=admin.email, issuer="Gladeal Admin")
+            qr_code_base64 = generate_qr_code_base64(otpauth_url)
+
+            return TwoFactorSetupResponse(
+                secret=secret,
+                otpauth_url=otpauth_url,
+                qr_code_base64=qr_code_base64,
+                backup_codes=backup_codes,
+            )
+
+
+async def enable_admin_2fa(admin_id: int, code: str) -> None:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            admin = await session.scalar(select(Admin).where(Admin.id == admin_id))
+            if admin is None:
+                raise InvalidCredentialsError()
+            if admin.is_two_factor_enabled:
+                raise TwoFactorAlreadyEnabledError()
+            if not admin.two_factor_secret:
+                raise TwoFactorNotEnabledError()
+
+            if not verify_totp_code(admin.two_factor_secret, code):
+                raise TwoFactorCodeInvalidError()
+
+            await mark_totp_code_used("admin", admin_id, code)
+            admin.is_two_factor_enabled = True
+
+
+async def verify_admin_2fa_login(pre_auth_token: str, code: str) -> AuthAdminResponse:
+    admin_id = decode_pre_auth_token(pre_auth_token, expected_role="admin")
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            admin = await session.scalar(select(Admin).where(Admin.id == admin_id))
+            if admin is None:
+                raise InvalidCredentialsError()
+            if not admin.is_two_factor_enabled or not admin.two_factor_secret:
+                raise TwoFactorNotEnabledError()
+
+            is_totp_valid = verify_totp_code(admin.two_factor_secret, code)
+            if is_totp_valid:
+                await mark_totp_code_used("admin", admin_id, code)
+            else:
+                is_backup_valid, remaining_codes = verify_and_burn_backup_code(
+                    code, admin.two_factor_backup_codes
+                )
+                if not is_backup_valid:
+                    raise TwoFactorCodeInvalidError()
+                admin.two_factor_backup_codes = remaining_codes
+
+    refresh_token, refresh_token_expires_at = await create_admin_refresh_token(admin_id)
+    return AuthAdminResponse(
+        access_token=generate_admin_access_token(admin_id),
+        refresh_token=refresh_token,
+        refresh_token_expires_at=refresh_token_expires_at,
+    )
+
+
+async def disable_admin_2fa(admin_id: int, password: str, code: str) -> None:
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            admin = await session.scalar(select(Admin).where(Admin.id == admin_id))
+            if admin is None:
+                raise InvalidCredentialsError()
+            if not verify_admin_password_hash(password, admin.password_hash):
+                raise InvalidCredentialsError()
+            if not admin.is_two_factor_enabled:
+                raise TwoFactorNotEnabledError()
+
+            is_totp_valid = verify_totp_code(admin.two_factor_secret or "", code)
+            if is_totp_valid:
+                await mark_totp_code_used("admin", admin_id, code)
+            else:
+                is_backup_valid, _ = verify_and_burn_backup_code(code, admin.two_factor_backup_codes)
+                if not is_backup_valid:
+                    raise TwoFactorCodeInvalidError()
+
+            admin.two_factor_secret = None
+            admin.two_factor_backup_codes = None
+            admin.is_two_factor_enabled = False
+
+
+async def get_admin_2fa_status(admin_id: int) -> TwoFactorStatusResponse:
+    async with AsyncSessionLocal() as session:
+        admin = await session.scalar(select(Admin).where(Admin.id == admin_id))
+        if admin is None:
+            raise InvalidCredentialsError()
+        return TwoFactorStatusResponse(
+            is_two_factor_enabled=bool(admin.is_two_factor_enabled),
+            backup_codes_remaining=len(admin.two_factor_backup_codes or []),
+        )
+

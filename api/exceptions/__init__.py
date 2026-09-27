@@ -24,6 +24,11 @@ from api.exceptions.exceptions import (
     OrderPaymentInvalidStatusError,
     SmsCallsProviderError,
     SmsCallsRateLimitError,
+    TwoFactorCodeInvalidError,
+    TwoFactorCodeAlreadyUsedError,
+    PreAuthTokenInvalidError,
+    TwoFactorAlreadyEnabledError,
+    TwoFactorNotEnabledError,
 )
 from api.exceptions.handler import register_exception_handlers
 
@@ -53,5 +58,10 @@ __all__ = [
     "OrderPaymentInvalidStatusError",
     "SmsCallsProviderError",
     "SmsCallsRateLimitError",
+    "TwoFactorCodeInvalidError",
+    "TwoFactorCodeAlreadyUsedError",
+    "PreAuthTokenInvalidError",
+    "TwoFactorAlreadyEnabledError",
+    "TwoFactorNotEnabledError",
     "register_exception_handlers",
 ]

@@ -10,3 +10,6 @@ asyncpg
 argon2-cffi
 httpx
 redis
+pyotp
+qrcode
+pillow

@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Numeric, String, false, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, JSON, Numeric, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from api.enums.enums_v1 import UserRoles, AdminRoles
@@ -28,6 +28,11 @@ class User(Base):
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     persondoc_number: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
+    two_factor_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_two_factor_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    two_factor_backup_codes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     month_sum_limit: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
@@ -155,6 +160,11 @@ class Admin(Base):
     last_name: Mapped[str] = mapped_column(String(128), nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    two_factor_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    is_two_factor_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    two_factor_backup_codes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     role: Mapped[AdminRoles] = mapped_column(
         enum_column(AdminRoles, "admin_roles"),
         nullable=False,

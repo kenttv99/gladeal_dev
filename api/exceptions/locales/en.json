@@ -25,5 +25,10 @@
   "ORDER_PAYMENT_INVALID_STATUS": "The order payment status is invalid for this operation.",
   "SMS_CALLS_PROVIDER_ERROR": "The SMS/calls provider returned an error.",
   "SMS_CALLS_RATE_LIMIT": "The SMS/call attempts limit has been exceeded. Try again later.",
-  "USER_PERSONDOC_REQUIRED": "Full name, date of birth and passport data are required for identification."
+  "USER_PERSONDOC_REQUIRED": "Full name, date of birth and passport data are required for identification.",
+  "TWO_FACTOR_CODE_INVALID": "Invalid two-factor authentication code.",
+  "TWO_FACTOR_CODE_ALREADY_USED": "Confirmation code has already been used. Please wait for a new code.",
+  "PRE_AUTH_TOKEN_INVALID": "Invalid or expired pre-authorization token.",
+  "TWO_FACTOR_ALREADY_ENABLED": "Two-factor authentication is already enabled.",
+  "TWO_FACTOR_NOT_ENABLED": "Two-factor authentication is not enabled."
 }

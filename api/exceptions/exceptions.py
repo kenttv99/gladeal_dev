@@ -143,3 +143,32 @@ class SmsCallsProviderError(BaseAPIException):
 class SmsCallsRateLimitError(BaseAPIException):
     status_code = 429
     error_code = "SMS_CALLS_RATE_LIMIT"
+
+
+###
+# Исключения двухфакторной аутентификации (2FA)
+###
+
+class TwoFactorCodeInvalidError(BaseAPIException):
+    status_code = 400
+    error_code = "TWO_FACTOR_CODE_INVALID"
+
+
+class TwoFactorCodeAlreadyUsedError(BaseAPIException):
+    status_code = 400
+    error_code = "TWO_FACTOR_CODE_ALREADY_USED"
+
+
+class PreAuthTokenInvalidError(BaseAPIException):
+    status_code = 401
+    error_code = "PRE_AUTH_TOKEN_INVALID"
+
+
+class TwoFactorAlreadyEnabledError(BaseAPIException):
+    status_code = 400
+    error_code = "TWO_FACTOR_ALREADY_ENABLED"
+
+
+class TwoFactorNotEnabledError(BaseAPIException):
+    status_code = 400
+    error_code = "TWO_FACTOR_NOT_ENABLED"

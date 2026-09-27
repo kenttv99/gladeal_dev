@@ -3,12 +3,18 @@ from fastapi import APIRouter, Body, Depends
 from api.enums.enums_v1 import VerificationMethods, VerificationScopes
 from api.schemas.schemas_v1 import (
     AccessTokenRefreshResponse,
+    AuthPreTwoFactorResponse,
     AuthUserResponse,
     LoginUserRequest,
     PhoneVerificationCodeRequest,
     PhoneVerificationCodeVerifyRequest,
     RegisterUserRequest,
     ResetPhoneNumberRequest,
+    TwoFactorCodeRequest,
+    TwoFactorDisableUserRequest,
+    TwoFactorSetupResponse,
+    TwoFactorStatusResponse,
+    TwoFactorVerifyRequest,
     UserKYCResponse,
 )
 from api.sms_calls.sms_calls_methods import (
@@ -25,16 +31,23 @@ from api.utils.jwt_methods import (
     authorize_user,
     create_refresh_token,
     generate_access_token,
+    generate_pre_auth_token,
     refresh_access_token,
     revoke_refresh_token,
 )
 from api.utils.users_methods import (
     authenticate_user,
     delete_account as delete_account_method,
+    disable_user_2fa,
+    enable_user_2fa,
     ensure_phone_number_available,
+    get_user_2fa_status,
     get_user_kyc_data,
+    is_user_2fa_enabled,
     register_user,
     reset_phone_number as reset_phone_number_method,
+    setup_user_2fa,
+    verify_user_2fa_login,
     verify_user_kyc,
 )
 
@@ -99,10 +112,14 @@ async def delete_account(
 
 
 @router.post("/login")
-async def auth(data: LoginUserRequest) -> AuthUserResponse | dict[str, bool]:
+async def auth(data: LoginUserRequest) -> AuthUserResponse | AuthPreTwoFactorResponse | dict[str, bool]:
     user_id = await authenticate_user(data.phone_number)
     if not await consume_user_sms_call_verification(user_id, VerificationScopes.LOGIN.value):
         return {"success": False}
+
+    if await is_user_2fa_enabled(user_id):
+        pre_auth_token = generate_pre_auth_token(user_id, "user")
+        return AuthPreTwoFactorResponse(pre_auth_token=pre_auth_token)
 
     refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
     return AuthUserResponse(
@@ -112,9 +129,13 @@ async def auth(data: LoginUserRequest) -> AuthUserResponse | dict[str, bool]:
     )
 
 @router.post("/login/without_sms")
-async def auth_without_sms(data: LoginUserRequest) -> AuthUserResponse | dict[str, bool]:
+async def auth_without_sms(data: LoginUserRequest) -> AuthUserResponse | AuthPreTwoFactorResponse | dict[str, bool]:
     '''Запасной ендпоинт для авторизации без смс'''
     user_id = await authenticate_user(data.phone_number)
+    if await is_user_2fa_enabled(user_id):
+        pre_auth_token = generate_pre_auth_token(user_id, "user")
+        return AuthPreTwoFactorResponse(pre_auth_token=pre_auth_token)
+
     refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
     return AuthUserResponse(
         access_token=generate_access_token(user_id),
@@ -139,6 +160,50 @@ async def logout(
 ) -> dict[str, bool]:
     await revoke_refresh_token(authorized_user_id, refresh_token)
     return {"success": True}
+
+
+@router.post("/2fa/setup", response_model=TwoFactorSetupResponse)
+async def user_2fa_setup(
+    authorized_user_id: int = Depends(authorize_user),
+) -> TwoFactorSetupResponse:
+    """Генерирует секрет, QR-код и резервные коды для настройки 2FA пользователя."""
+    return await setup_user_2fa(authorized_user_id)
+
+
+@router.post("/2fa/enable")
+async def user_2fa_enable(
+    data: TwoFactorCodeRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    """Активирует 2FA пользователя по первому проверочному коду."""
+    await enable_user_2fa(authorized_user_id, data.code)
+    return {"success": True}
+
+
+@router.post("/2fa/verify", response_model=AuthUserResponse)
+async def user_2fa_verify(
+    data: TwoFactorVerifyRequest,
+) -> AuthUserResponse:
+    """Завершает авторизацию пользователя с проверкой второго фактора (TOTP или backup код)."""
+    return await verify_user_2fa_login(data.pre_auth_token, data.code)
+
+
+@router.post("/2fa/disable")
+async def user_2fa_disable(
+    data: TwoFactorDisableUserRequest,
+    authorized_user_id: int = Depends(authorize_user),
+) -> dict[str, bool]:
+    """Отключает 2FA пользователя."""
+    await disable_user_2fa(authorized_user_id, data.code)
+    return {"success": True}
+
+
+@router.get("/2fa/status", response_model=TwoFactorStatusResponse)
+async def user_2fa_status(
+    authorized_user_id: int = Depends(authorize_user),
+) -> TwoFactorStatusResponse:
+    """Возвращает статус 2FA пользователя."""
+    return await get_user_2fa_status(authorized_user_id)
 
 
 @router.post("/reset-phone-number")

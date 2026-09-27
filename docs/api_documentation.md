@@ -129,7 +129,12 @@ Refresh token привязан к `user_id`. При удалении польз�
 - `POST /api/v1/auth/verification-code` - отправка кода подтверждения через SMS или звонок.
 - `POST /api/v1/auth/verification-code/verify` - проверка кода подтверждения.
 - `POST /api/v1/auth/register` - регистрация пользователя.
-- `POST /api/v1/auth/login` - авторизация по номеру телефона и выдача access token + refresh token.
+- `POST /api/v1/auth/login` - авторизация по номеру телефона и выдача access token + refresh token (или pre_auth_token при включенном 2FA).
+- `POST /api/v1/auth/2fa/setup` - генерация секрета, QR-кода и резервных кодов для настройки 2FA.
+- `POST /api/v1/auth/2fa/enable` - активация 2FA по 6-значному TOTP коду.
+- `POST /api/v1/auth/2fa/verify` - завершение авторизации при включенном 2FA по pre_auth_token и TOTP/backup коду.
+- `POST /api/v1/auth/2fa/disable` - отключение 2FA.
+- `GET /api/v1/auth/2fa/status` - получение статуса 2FA и количества оставшихся резервных кодов.
 - `POST /api/v1/auth/access_token_refresh/` - обновление access token по refresh token.
 - `POST /api/v1/auth/logout/` - отзыв refresh token авторизованного пользователя.
 - `POST /api/v1/auth/delete-account` - удаление аккаунта авторизованного пользователя.
@@ -256,10 +261,15 @@ Endpoint потребляет одноразовый Redis-флаг `sms_calls:v
 
 Логин возвращает:
 
-- `access_token`
-- `refresh_token`
-- `refresh_token_expires_at`
-- `token_type`
+- При отключенном 2FA (`is_two_factor_enabled == false`):
+  - `access_token`
+  - `refresh_token`
+  - `refresh_token_expires_at`
+  - `token_type`
+- При включенном 2FA (`is_two_factor_enabled == true`):
+  - `two_factor_required: true`
+  - `pre_auth_token: "..."` (JWT со scope `2fa_pre_auth`, срок действия 5 минут)
+  - `token_type: "pre_auth"`
 
 Endpoint потребляет одноразовый Redis-флаг `sms_calls:verified:login:user:{user_id}`. Если флага нет, возвращает:
 
@@ -267,7 +277,7 @@ Endpoint потребляет одноразовый Redis-флаг `sms_calls:v
 {"success": false}
 ```
 
-Пример ответа login:
+Пример ответа login без 2FA:
 
 ```json
 {
@@ -277,6 +287,61 @@ Endpoint потребляет одноразовый Redis-флаг `sms_calls:v
   "token_type": "bearer"
 }
 ```
+
+Пример ответа login с 2FA:
+
+```json
+{
+  "two_factor_required": true,
+  "pre_auth_token": "...",
+  "token_type": "pre_auth"
+}
+```
+
+### Двухфакторная аутентификация (2FA / TOTP)
+
+Двухфакторная аутентификация построена на стандарте TOTP (RFC 6238 / RFC 4226) и совместима с Google Authenticator, Microsoft Authenticator и другими приложениями.
+
+#### Настройка 2FA (`POST /api/v1/auth/2fa/setup`):
+- Требует авторизации (`Bearer access_token`).
+- Генерирует секретный ключ Base32, URL формата `otpauth://totp/...`, Base64 PNG изображение QR-кода и 8 одноразовых резервных кодов (например, `A1B2-C3D4`).
+- Секрет и хэши резервных кодов сохраняются в профиле, флаг `is_two_factor_enabled` остается `false` до подтверждения.
+- Пример ответа:
+```json
+{
+  "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+  "otpauth_url": "otpauth://totp/Gladeal:+79000000001?secret=...",
+  "qr_code_base64": "data:image/png;base64,...",
+  "backup_codes": ["A1B2-C3D4", "E5F6-G7H8", "I9J0-K1L2", "M3N4-O5P6", "Q7R8-S9T0", "U1V2-W3X4", "Y5Z6-A7B8", "C9D0-E1F2"]
+}
+```
+
+#### Активация 2FA (`POST /api/v1/auth/2fa/enable`):
+- Принимает:
+```json
+{
+  "code": "123456"
+}
+```
+- Проверяет 6-значный TOTP код, защищает от Replay-атаки через Redis (окно 90 секунд) и переводит `is_two_factor_enabled` в `true`.
+
+#### Завершение входа по второму фактору (`POST /api/v1/auth/2fa/verify`):
+- Публичный эндпоинт, принимает:
+```json
+{
+  "pre_auth_token": "...",
+  "code": "123456"
+}
+```
+- В поле `code` передается 6-значный код из Google Authenticator или один из неиспользованных резервных кодов (`A1B2-C3D4`).
+- При вводе резервного кода соответствующий хэш сжигается (удаляется из БД).
+- При успехе выпускаются боевые `access_token` и `refresh_token`.
+
+#### Отключение 2FA (`POST /api/v1/auth/2fa/disable`):
+- Принимает `code` (текущий TOTP код или резервный код) и сбрасывает настройки 2FA.
+
+#### Статус 2FA (`GET /api/v1/auth/2fa/status`):
+- Возвращает `{ "is_two_factor_enabled": true, "backup_codes_remaining": 7 }`.
 
 `POST /api/v1/auth/access_token_refresh/` принимает:
 

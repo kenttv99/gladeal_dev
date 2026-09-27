@@ -20,6 +20,7 @@ from api.exceptions import (
     InvalidAccessTokenError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
+    PreAuthTokenInvalidError,
     RefreshTokenExpiredError,
 )
 from database.config import AsyncSessionLocal
@@ -203,3 +204,33 @@ async def authorize_admin(
 def ensure_authorized_user_id(request_user_id: int, authorized_user_id: int) -> None:
     if request_user_id != authorized_user_id:
         raise AccessDeniedError()
+
+
+def generate_pre_auth_token(entity_id: int, role: str) -> str:
+    """Генерирует короткоживущий токен предварительной авторизации для 2FA (5 минут)."""
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "sub": str(entity_id),
+            "entity_id": entity_id,
+            "role": role,
+            "scope": "2fa_pre_auth",
+            "iat": now,
+            "exp": now + timedelta(minutes=5),
+        },
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def decode_pre_auth_token(pre_auth_token: str, expected_role: str) -> int:
+    """Проверяет токен предварительной авторизации и возвращает entity_id."""
+    try:
+        payload = jwt.decode(pre_auth_token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        if payload.get("scope") != "2fa_pre_auth":
+            raise PreAuthTokenInvalidError()
+        if payload.get("role") != expected_role:
+            raise PreAuthTokenInvalidError()
+        return int(payload["entity_id"])
+    except (ExpiredSignatureError, InvalidTokenError, KeyError, TypeError, ValueError) as exc:
+        raise PreAuthTokenInvalidError() from exc

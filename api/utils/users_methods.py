@@ -7,12 +7,35 @@ from api.enums.enums_v1 import OrderStates
 from api.exceptions import (
     AccountDeletionBlockedByActiveOrdersError,
     PhoneNumberAlreadyExistsError,
+    TwoFactorAlreadyEnabledError,
+    TwoFactorCodeInvalidError,
+    TwoFactorNotEnabledError,
     UserBannedError,
     UserNotFoundError,
     UserPersondocRequiredError,
 )
 from api.payments.payments_methods import check_identification_status
-from api.schemas.schemas_v1 import UserKYCResponse
+from api.schemas.schemas_v1 import (
+    AuthUserResponse,
+    TwoFactorSetupResponse,
+    TwoFactorStatusResponse,
+    UserKYCResponse,
+)
+from api.utils.jwt_methods import (
+    create_refresh_token,
+    decode_pre_auth_token,
+    generate_access_token,
+)
+from api.utils.two_factor_methods import (
+    generate_backup_codes,
+    generate_qr_code_base64,
+    generate_totp_uri,
+    generate_two_factor_secret,
+    hash_backup_code,
+    mark_totp_code_used,
+    verify_and_burn_backup_code,
+    verify_totp_code,
+)
 from database.config import AsyncSessionLocal
 from database.models.notifications import Notification
 from database.models.orders import Order, OrderStatusHistory
@@ -243,4 +266,127 @@ async def get_user_kyc_data(user_id: int) -> UserKYCResponse:
             kyc_level=kyc_entry.kyc_level if kyc_entry else None,
             updated_at=kyc_entry.updated_at if kyc_entry else None,
         )
+
+
+async def is_user_2fa_enabled(user_id: int) -> bool:
+    async with AsyncSessionLocal() as session:
+        return bool(
+            await session.scalar(
+                select(User.is_two_factor_enabled).where(User.id == user_id)
+            )
+        )
+
+
+async def setup_user_2fa(user_id: int) -> TwoFactorSetupResponse:
+    await ensure_user_not_banned(user_id)
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            user = await session.scalar(select(User).where(User.id == user_id))
+            if user is None:
+                raise UserNotFoundError()
+            if user.is_two_factor_enabled:
+                raise TwoFactorAlreadyEnabledError()
+
+            secret = generate_two_factor_secret()
+            backup_codes = generate_backup_codes(8)
+            hashed_backup_codes = [hash_backup_code(c) for c in backup_codes]
+
+            user.two_factor_secret = secret
+            user.two_factor_backup_codes = hashed_backup_codes
+            user.is_two_factor_enabled = False
+
+            otpauth_url = generate_totp_uri(secret, account_name=user.phone_number)
+            qr_code_base64 = generate_qr_code_base64(otpauth_url)
+
+            return TwoFactorSetupResponse(
+                secret=secret,
+                otpauth_url=otpauth_url,
+                qr_code_base64=qr_code_base64,
+                backup_codes=backup_codes,
+            )
+
+
+async def enable_user_2fa(user_id: int, code: str) -> None:
+    await ensure_user_not_banned(user_id)
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            user = await session.scalar(select(User).where(User.id == user_id))
+            if user is None:
+                raise UserNotFoundError()
+            if user.is_two_factor_enabled:
+                raise TwoFactorAlreadyEnabledError()
+            if not user.two_factor_secret:
+                raise TwoFactorNotEnabledError()
+
+            if not verify_totp_code(user.two_factor_secret, code):
+                raise TwoFactorCodeInvalidError()
+
+            await mark_totp_code_used("user", user_id, code)
+            user.is_two_factor_enabled = True
+
+
+async def verify_user_2fa_login(pre_auth_token: str, code: str) -> AuthUserResponse:
+    user_id = decode_pre_auth_token(pre_auth_token, expected_role="user")
+    await ensure_user_not_banned(user_id)
+
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            user = await session.scalar(select(User).where(User.id == user_id))
+            if user is None:
+                raise UserNotFoundError()
+            if not user.is_two_factor_enabled or not user.two_factor_secret:
+                raise TwoFactorNotEnabledError()
+
+            is_totp_valid = verify_totp_code(user.two_factor_secret, code)
+            if is_totp_valid:
+                await mark_totp_code_used("user", user_id, code)
+            else:
+                is_backup_valid, remaining_codes = verify_and_burn_backup_code(
+                    code, user.two_factor_backup_codes
+                )
+                if not is_backup_valid:
+                    raise TwoFactorCodeInvalidError()
+                user.two_factor_backup_codes = remaining_codes
+
+    refresh_token, refresh_token_expires_at = await create_refresh_token(user_id)
+    return AuthUserResponse(
+        access_token=generate_access_token(user_id),
+        refresh_token=refresh_token,
+        refresh_token_expires_at=refresh_token_expires_at,
+    )
+
+
+async def disable_user_2fa(user_id: int, code: str) -> None:
+    await ensure_user_not_banned(user_id)
+    async with AsyncSessionLocal() as session:
+        async with session.begin():
+            user = await session.scalar(select(User).where(User.id == user_id))
+            if user is None:
+                raise UserNotFoundError()
+            if not user.is_two_factor_enabled:
+                raise TwoFactorNotEnabledError()
+
+            is_totp_valid = verify_totp_code(user.two_factor_secret or "", code)
+            if is_totp_valid:
+                await mark_totp_code_used("user", user_id, code)
+            else:
+                is_backup_valid, _ = verify_and_burn_backup_code(code, user.two_factor_backup_codes)
+                if not is_backup_valid:
+                    raise TwoFactorCodeInvalidError()
+
+            user.two_factor_secret = None
+            user.two_factor_backup_codes = None
+            user.is_two_factor_enabled = False
+
+
+async def get_user_2fa_status(user_id: int) -> TwoFactorStatusResponse:
+    async with AsyncSessionLocal() as session:
+        user = await session.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            raise UserNotFoundError()
+        return TwoFactorStatusResponse(
+            is_two_factor_enabled=bool(user.is_two_factor_enabled),
+            backup_codes_remaining=len(user.two_factor_backup_codes or []),
+        )
+
 
