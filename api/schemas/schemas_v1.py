@@ -4,7 +4,6 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
 from api.enums.enums_v1 import (
-    OrderPaymentStates,
     OrderStates,
     OrderTypes,
     UserRoles,

@@ -85,6 +85,7 @@ OpenAPI JSON основного API:
 - `/api/v1/users` - профиль и KYC верификация пользователя.
 - `/api/v1/client` - действия пользователя как заказчика.
 - `/api/v1/performer` - действия пользователя как исполнителя.
+- `/api/v1/admin` - панель управления и действия администратора.
 - `/v1/paygine` - webhook-и и redirect-ы Paygine в отдельном приложении.
 
 Роутеры клиента и исполнителя подключены с обязательной авторизацией. В auth-роутере публичными остаются отправка и проверка кода, регистрация, логин и обновление access token по refresh token. `logout`, удаление аккаунта и смена номера телефона требуют access token.
@@ -487,6 +488,24 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `deal_payout_link` использует `paygine_payout_operation_id` и строит ссылку на `SDPayOutPage`.
 - `deal_refund_link` использует `paygine_revoked_operation_id` и строит ссылку на `SDPayOutPage`.
 
+## Admin endpoints
+
+- `POST /api/v1/admin/login` - авторизация администратора по email и паролю. При включенном 2FA возвращает `pre_auth_token`, иначе access token + refresh token.
+- `POST /api/v1/admin/logout` - отзыв refresh token администратора.
+- `POST /api/v1/admin/2fa/setup` - генерация секрета, QR-кода и резервных кодов для настройки 2FA администратора.
+- `POST /api/v1/admin/2fa/enable` - активация 2FA администратора по TOTP коду.
+- `POST /api/v1/admin/2fa/verify` - завершение входа администратора по `pre_auth_token` и коду (TOTP или backup).
+- `POST /api/v1/admin/2fa/disable` - отключение 2FA администратора (требует пароль и код).
+- `GET /api/v1/admin/2fa/status` - статус 2FA и остаток резервных кодов администратора.
+- `GET /api/v1/admin/orders` - постраничный список сделок с фильтрацией по пользователям, статусу и датам.
+- `GET /api/v1/admin/users` - постраничный список пользователей с агрегированной статистикой сделок.
+- `GET /api/v1/admin/order_info` - полная информация о сделке и история статусов.
+- `GET /api/v1/admin/get_balance` - получение баланса кубышки платформы.
+- `POST /api/v1/admin/ban_user` - блокировка пользователя с сохранением причины.
+- `POST /api/v1/admin/unban_user` - разблокировка пользователя.
+- `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата.
+- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация выплаты.
+
 ## Платежный контур
 
 Подробная реализация платежных запросов и webhook-ов описана в:
@@ -498,8 +517,8 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 
 - `POST /api/v1/client/deal_create` - регистрация депозитной сделки.
 - `POST /api/v1/client/deal_confirm` - завершение платежа и регистрация payout.
-- `GET /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата.
-- `GET /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout.
+- `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата.
+- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout.
 - `POST /v1/paygine/webhook_order_status` - синхронизация статусов операций Paygine с БД.
 
 ## Статусы сделок

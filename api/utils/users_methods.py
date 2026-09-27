@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, exists, func, insert, or_, select, update
+from sqlalchemy import delete, exists, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates
