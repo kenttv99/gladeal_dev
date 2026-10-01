@@ -498,7 +498,8 @@ async def claim_authorized_payment_order_ids(
     """Выбираем заказы с захолдированной оплатой старше PAYMENT_HOLD_DURATION_MINUTES."""
     checked_at = datetime.now(timezone.utc)
     hold_cutoff = checked_at - timedelta(minutes=float(PAYMENT_HOLD_DURATION_MINUTES))
-    hold_start = func.greatest(OrderPaymentData.payment_authorized_at, Order.performer_connected_at)
+    hold_anchor = func.coalesce(Order.performer_connected_at, OrderPaymentData.payment_authorized_at)
+    hold_start = func.greatest(OrderPaymentData.payment_authorized_at, hold_anchor)
 
     candidate_ids = (
         select(Order.id)
@@ -506,7 +507,7 @@ async def claim_authorized_payment_order_ids(
         .where(
             OrderPaymentData.payment_status == OrderPaymentStates.AUTHORIZED.value,
             OrderPaymentData.payment_authorized_at.is_not(None),
-            Order.performer_connected_at.is_not(None),
+            or_(Order.performer_connected_at.is_not(None), Order.performer_id.is_not(None)),
             hold_start <= hold_cutoff,
             Order.status.not_in((
                 OrderStates.AWAITING_CONFLICT.value,
