@@ -15,7 +15,12 @@ from api.exceptions import (
     TwoFactorNotEnabledError,
     ValidationError,
 )
-from api.payments.payments_methods import refund_money, register_payout_deal
+from api.payments.payments_methods import (
+    complete_paymented_deal,
+    refund_money,
+    register_payout_deal,
+    reverse_paymented_deal,
+)
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
     AdminOrderResponse,
@@ -288,6 +293,9 @@ async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
         created_at=order.created_at,
         updated_at=order.updated_at,
         completed_at=order.completed_at,
+        performer_connected_at=order.performer_connected_at,
+        client_declined_at=order.client_declined_at,
+        arbitration_reason=order.arbitration_reason,
         status_history=[
             AdminOrderStatusHistoryResponse(
                 id=history.id,
@@ -295,6 +303,7 @@ async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
                 old_status=history.old_status,
                 new_status=history.new_status,
                 changed_by_user_id=history.changed_by_user_id,
+                comment=history.comment,
                 created_at=history.created_at,
             )
             for history in status_history
@@ -302,8 +311,10 @@ async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
     )
 
 
-async def close_order_to_client(order_id: int) -> None:
+async def close_order_to_client(order_id: int, admin_id: int, reason: str) -> None:
     """Закрываем спор в пользу заказчика и регистрируем возврат без комиссии."""
+    if not reason or not reason.strip():
+        raise ValidationError()
     async with AsyncSessionLocal() as session:
         async with session.begin():
             result = await session.execute(
@@ -317,6 +328,7 @@ async def close_order_to_client(order_id: int) -> None:
                     OrderPaymentData.paygine_revoked_operation_id,
                     OrderPaymentData.revoke_status,
                     User.phone_number,
+                    OrderPaymentData.paygine_payment_operation_id,
                 )
                 .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
                 .join(User, User.id == Order.client_id)
@@ -337,10 +349,52 @@ async def close_order_to_client(order_id: int) -> None:
                 refund_operation_id,
                 revoke_status,
                 customer_phone,
+                payment_operation_id,
             ) = row
             ensure_order_status(current_status, OrderStates.OPEN_CONFLICT)
-            ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+            payment_status_val = (
+                payment_status.value
+                if isinstance(payment_status, OrderPaymentStates)
+                else payment_status
+            )
+            if payment_status_val not in (
+                OrderPaymentStates.AUTHORIZED.value,
+                OrderPaymentStates.COMPLETED.value,
+            ):
+                raise OrderPaymentInvalidStatusError()
             ensure_no_active_payment_operation(refund_operation_id, revoke_status)
+
+            if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+                if payment_operation_id is None:
+                    raise OrderNotFoundError()
+                await reverse_paymented_deal(int(payment_operation_id))
+                await session.execute(
+                    update(Order)
+                    .where(Order.id == order_id)
+                    .values(
+                        arbitration_reason=reason,
+                        **order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value),
+                    )
+                )
+                await add_order_status_history(
+                    session,
+                    order_id,
+                    current_status,
+                    OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
+                    admin_id,
+                    comment=reason,
+                )
+                await session.execute(
+                    update(OrderPaymentData)
+                    .where(OrderPaymentData.order_id == order_id)
+                    .values(
+                        payment_status=OrderPaymentStates.CANCELED.value,
+                        revoke_status=OrderPaymentStates.COMPLETED.value,
+                        revoked_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
+                return
 
             refund_result = await refund_money(
                 RefundMoneyPaymentRequest(
@@ -355,14 +409,18 @@ async def close_order_to_client(order_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value))
+                .values(
+                    arbitration_reason=reason,
+                    **order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value),
+                )
             )
             await add_order_status_history(
                 session,
                 order_id,
                 current_status,
                 OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-                None,
+                admin_id,
+                comment=reason,
             )
             await session.execute(
                 update(OrderPaymentData)
@@ -377,8 +435,10 @@ async def close_order_to_client(order_id: int) -> None:
             )
 
 
-async def close_order_to_performer(order_id: int) -> None:
+async def close_order_to_performer(order_id: int, admin_id: int, reason: str) -> None:
     """Закрываем спор в пользу исполнителя и регистрируем выплату без комиссии."""
+    if not reason or not reason.strip():
+        raise ValidationError()
     async with AsyncSessionLocal() as session:
         async with session.begin():
             result = await session.execute(
@@ -392,6 +452,7 @@ async def close_order_to_performer(order_id: int) -> None:
                     OrderPaymentData.paygine_payout_operation_id,
                     OrderPaymentData.payout_status,
                     User.phone_number,
+                    OrderPaymentData.paygine_payment_operation_id,
                 )
                 .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
                 .join(User, User.id == Order.performer_id)
@@ -412,12 +473,36 @@ async def close_order_to_performer(order_id: int) -> None:
                 payout_operation_id,
                 payout_status,
                 performer_phone,
+                payment_operation_id,
             ) = row
             ensure_order_status(current_status, OrderStates.OPEN_CONFLICT)
-            ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+            payment_status_val = (
+                payment_status.value
+                if isinstance(payment_status, OrderPaymentStates)
+                else payment_status
+            )
+            if payment_status_val not in (
+                OrderPaymentStates.AUTHORIZED.value,
+                OrderPaymentStates.COMPLETED.value,
+            ):
+                raise OrderPaymentInvalidStatusError()
             ensure_no_active_payment_operation(payout_operation_id, payout_status)
             if performer_id is None or performer_phone is None or not performer_email:
                 raise ValidationError()
+
+            if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+                if payment_operation_id is None:
+                    raise OrderNotFoundError()
+                await complete_paymented_deal(int(payment_operation_id))
+                await session.execute(
+                    update(OrderPaymentData)
+                    .where(OrderPaymentData.order_id == order_id)
+                    .values(
+                        payment_status=OrderPaymentStates.COMPLETED.value,
+                        payment_complete_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
 
             payout_result = await register_payout_deal(
                 RegisterPayoutDealPaymentRequest(
@@ -432,14 +517,18 @@ async def close_order_to_performer(order_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value))
+                .values(
+                    arbitration_reason=reason,
+                    **order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value),
+                )
             )
             await add_order_status_history(
                 session,
                 order_id,
                 current_status,
                 OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
-                None,
+                admin_id,
+                comment=reason,
             )
             await session.execute(
                 update(OrderPaymentData)

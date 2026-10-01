@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates, OrderTypes, UserRoles
@@ -14,6 +14,7 @@ from api.exceptions import (
 )
 from api.payments.payments_methods import (
     cancle_unpayment_deal,
+    complete_paymented_deal,
     refund_money,
     register_deposit_deal,
     register_payout_deal,
@@ -301,6 +302,7 @@ async def approve_order(
                 .where(Order.id == order_id)
                 .values(
                     performer_id=performer_id,
+                    performer_connected_at=func.now(),
                     **order_status_values(OrderStates.AWAITING_PAYMENT.value),
                 )
             )
@@ -444,10 +446,14 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                 if hasattr(refund_data.payment_status, "value")
                 else refund_data.payment_status
             )
-            op_id = payment_operation_id or refund_data.payment_operation_id
+            op_id = getattr(refund_data, "payment_operation_id", None)
             if (
                 payment_status_val == OrderPaymentStates.AUTHORIZED.value
-                and is_cancellation_within_hold_duration(refund_data.payment_authorized_at, client_cancel_at)
+                and is_cancellation_within_hold_duration(
+                    refund_data.payment_authorized_at,
+                    client_cancel_at,
+                    getattr(refund_data, "performer_connected_at", None),
+                )
                 and op_id is not None
             ):
                 await reverse_paymented_deal(op_id)
@@ -498,7 +504,10 @@ async def client_softdecline_order(order_id: int, client_id: int) -> None:
                 await session.execute(
                     update(Order)
                     .where(Order.id == order_id)
-                    .values(**order_status_values(OrderStates.AWAITING_CONFLICT.value))
+                    .values(
+                        client_declined_at=func.now(),
+                        **order_status_values(OrderStates.AWAITING_CONFLICT.value),
+                    )
                 )
                 await add_order_status_history(
                     session,
@@ -541,7 +550,10 @@ async def client_harddecline_order(order_id: int, client_id: int) -> None:
             await session.execute(
                 update(Order)
                 .where(Order.id == order_id)
-                .values(**order_status_values(OrderStates.AWAITING_CONFLICT.value))
+                .values(
+                    client_declined_at=func.now(),
+                    **order_status_values(OrderStates.AWAITING_CONFLICT.value),
+                )
             )
             await add_order_status_history(
                 session,
@@ -559,17 +571,46 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
             await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
-                select(Order.status, Order.client_id)
+                select(
+                    Order.status,
+                    Order.client_id,
+                    OrderPaymentData.payment_status,
+                    OrderPaymentData.paygine_payment_operation_id,
+                )
+                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
                 .where(Order.id == order_id, Order.performer_id == performer_id)
-                .with_for_update()
+                .with_for_update(of=(Order, OrderPaymentData))
             )
             order_row = order_data.one_or_none()
             if order_row is None:
                 raise OrderNotFoundError()
-            current_status, client_id = order_row
+            current_status = order_row[0]
+            client_id = order_row[1]
+            payment_status = order_row[2] if len(order_row) > 2 else None
+            payment_operation_id = order_row[3] if len(order_row) > 3 else None
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
             ensure_order_status(current_status, OrderStates.AWAITING_CONFLICT)
+
+            payment_status_val = (
+                payment_status.value
+                if isinstance(payment_status, OrderPaymentStates)
+                else payment_status
+            )
+            if (
+                payment_status_val == OrderPaymentStates.AUTHORIZED.value
+                and payment_operation_id is not None
+            ):
+                await complete_paymented_deal(int(payment_operation_id))
+                await session.execute(
+                    update(OrderPaymentData)
+                    .where(OrderPaymentData.order_id == order_id)
+                    .values(
+                        payment_status=OrderPaymentStates.COMPLETED.value,
+                        payment_complete_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
 
             await session.execute(
                 update(Order)

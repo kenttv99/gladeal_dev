@@ -22,10 +22,11 @@ async def run_worker() -> None:
                 processed_holds = await process_authorized_payments(session)
                 processed = await process_expired_orders(session)
             logger.info(
-                "Processed worker iteration: completed_holds=%s cancle=%s confirm=%s",
+                "Processed worker iteration: completed_holds=%s cancle=%s confirm=%s conflict_cancel=%s",
                 processed_holds,
                 processed["cancle"],
                 processed["confirm"],
+                processed.get("conflict_cancel", 0),
             )
         except Exception:
             logger.exception("Order expire worker iteration failed")

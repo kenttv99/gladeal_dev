@@ -48,35 +48,46 @@
 
 `EXPIRED_ORDER_BATCH_SIZE = 1000`
 
-Воркер обрабатывает только сделки в статусах:
+Воркер обрабатывает сделки в трех сценариях:
 
-- `awaiting_performer_confirmation`
-- `awaiting_client_confirmation`
+- `awaiting_performer_confirmation` (action `cancel`) — истечение срока подтверждения исполнителем (`expire_in`).
+- `awaiting_client_confirmation` (action `confirm`) — автоподтверждение с выплатой исполнителю при молчании заказчика 3 дня (72 часа).
+- `awaiting_conflict` (action `conflict_cancel`) — автоотмена с возвратом заказчику при молчании исполнителя 3 дня (на 4-й день / после 72 часов).
 
 ## Логика статусов
 
-Сделки в статусе `awaiting_performer_confirmation` проверяются по полю `expire_in`.
-
+### 1. `awaiting_performer_confirmation` (истечение срока `expire_in`)
 Если `expire_in <= текущее время`, воркер:
-
 - регистрирует возврат через `refund_money(...)` с `client_ref` заказчика;
 - переводит сделку в `awaiting_client_payout`;
 - сохраняет `paygine_revoked_operation_id` и `revoke_status = registered`.
 
-Сделки в статусе `awaiting_client_confirmation` проверяются по полю `completed_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES`.
-
-Если `completed_at <= текущее время - EXPIRE_TIME_TO_COMNFIRM_MINUTES`, воркер:
-
+### 2. `awaiting_client_confirmation` (3 календарных дня молчания заказчика)
+Срок проверяется по полю `completed_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES` (4320 минут = 72 часа = 3 календарных дня, без разделения на рабочие и нерабочие дни).
+Если прошло 3 дня (`completed_at <= now - 72h`), воркер:
 - регистрирует payout через `register_payout_deal(...)`;
 - переводит сделку в `confirm_by_expire_time_to_performer`;
 - устанавливает `orders_payment_data.payment_status = completed`;
 - пишет `payment_complete_at`;
 - сохраняет `paygine_payout_operation_id`;
-- выставляет `payout_status = registered`;
-- выставляет `expire_payout_at`.
+- выставляет `payout_status = registered` и `expire_payout_at`.
+
+### 3. `awaiting_conflict` (3 календарных дня молчания исполнителя после отказа заказчика)
+Срок проверяется по полю `client_declined_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES` (4320 минут = 72 часа = 3 календарных дня).
+Если за 3 дня исполнитель не согласился и не открыл спор, на 4-й день (после истечения 72 часов) воркер:
+- если платеж в статусе `AUTHORIZED`: вызывает `reverse_paymented_deal(...)` (разморозка без комиссии) и переводит сделку в `cancled_by_expire_time`;
+- если платеж в статусе `COMPLETED`: вызывает `refund_money(...)` (возврат средств заказчику) и переводит сделку в `awaiting_client_payout`;
+- фиксирует комментарий в `order_status_history`.
+
+## Воркер подтверждения платежей (списание холда)
+
+Функция `process_authorized_payments` периодически проверяет сделки с замороженными средствами (`payment_status = AUTHORIZED`):
+- Холд отсчитывается от момента подключения исполнителя к задаче: `hold_start_at = max(payment_authorized_at, performer_connected_at)`.
+- Если исполнитель еще не подключился (`performer_connected_at IS NULL`), списание холда (`SDComplete`) не выполняется.
+- Если прошло более 5 минут с момента подключения и сделка не находится в `awaiting_conflict`, воркер выполняет `SDComplete`, переводя платеж в `COMPLETED`.
+- При открытии спора (`open_conflict`) платеж незамедлительно переводится в `COMPLETED` через `SDComplete`, обеспечивая арбитру возможность вынести любое решение (возврат заказчику или выплата исполнителю).
 
 При смене статуса воркер:
-
 - обновляет `orders.status`;
 - пишет запись в `order_status_history`.
 

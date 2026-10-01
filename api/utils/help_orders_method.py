@@ -79,6 +79,7 @@ class RefundMoneyOrderData:
     payment_operation_id: int | None = None
     payment_status: OrderPaymentStates | str | None = None
     payment_authorized_at: datetime | None = None
+    performer_connected_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,7 @@ async def add_order_status_history(
     old_status: OrderStates | str | None,
     new_status: str,
     changed_by_user_id: int | None,
+    comment: str | None = None,
 ) -> None:
     await session.execute(
         insert(OrderStatusHistory).values(
@@ -172,6 +174,7 @@ async def add_order_status_history(
             old_status=order_status_value(old_status),
             new_status=new_status,
             changed_by_user_id=changed_by_user_id,
+            comment=comment,
         )
     )
 
@@ -410,6 +413,7 @@ async def get_performer_decline_refund_data(
             OrderPaymentData.customer_email,
             User.phone_number,
             OrderPaymentData.payment_authorized_at,
+            Order.performer_connected_at,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
         .join(User, User.id == Order.client_id)
@@ -420,17 +424,16 @@ async def get_performer_decline_refund_data(
     if row is None:
         raise OrderNotFoundError()
 
-    (
-        current_status,
-        client_id,
-        price,
-        title,
-        payment_operation_id,
-        payment_status,
-        customer_email,
-        customer_phone,
-        payment_authorized_at,
-    ) = row
+    current_status = row[0]
+    client_id = row[1]
+    price = row[2]
+    title = row[3]
+    payment_operation_id = row[4]
+    payment_status = row[5]
+    customer_email = row[6]
+    customer_phone = row[7]
+    payment_authorized_at = row[8]
+    performer_connected_at = row[9] if len(row) > 9 else None
     if client_id == performer_id:
         raise OrderSelfExecutionForbiddenError()
     ensure_order_status(current_status, PERFORMER_DECLINE_ORDER_STATUSES)
@@ -448,6 +451,7 @@ async def get_performer_decline_refund_data(
             payment_operation_id=int(payment_operation_id),
             payment_status=payment_status,
             payment_authorized_at=payment_authorized_at,
+            performer_connected_at=performer_connected_at,
         )
     else:
         ensure_order_payment_status(
@@ -464,6 +468,7 @@ async def get_performer_decline_refund_data(
         payment_operation_id=int(payment_operation_id),
         payment_status=payment_status,
         payment_authorized_at=payment_authorized_at,
+        performer_connected_at=performer_connected_at,
     )
 
 
@@ -544,14 +549,21 @@ async def get_client_cancel_request_time(
     )
 
 
+
 def is_cancellation_within_hold_duration(
     payment_authorized_at: datetime | None,
     client_cancelled_at: datetime | None,
+    performer_connected_at: datetime | None = None,
 ) -> bool:
     if payment_authorized_at is None:
         return False
+    hold_start = (
+        max(payment_authorized_at, performer_connected_at)
+        if performer_connected_at is not None
+        else payment_authorized_at
+    )
     cancel_time = client_cancelled_at or datetime.now(timezone.utc)
-    delta = cancel_time - payment_authorized_at
+    delta = cancel_time - hold_start
     return delta <= timedelta(minutes=float(PAYMENT_HOLD_DURATION_MINUTES))
 
 

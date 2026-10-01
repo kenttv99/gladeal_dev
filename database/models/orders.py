@@ -47,6 +47,8 @@ class Order(Base):
         Index("ix_orders_created_at", "created_at"),
         Index("ix_orders_client_created_id", "client_id", "created_at", "id"),
         Index("ix_orders_performer_created_id", "performer_id", "created_at", "id"),
+        Index("ix_orders_performer_connected_at", "performer_connected_at"),
+        Index("ix_orders_client_declined_at", "client_declined_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -96,6 +98,9 @@ class Order(Base):
         nullable=False,
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    performer_connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    arbitration_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     client: Mapped["User"] = relationship(
         "User",
@@ -154,6 +159,7 @@ class OrderStatusHistory(Base):
         nullable=False,
     )
     changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

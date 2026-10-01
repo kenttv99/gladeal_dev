@@ -502,9 +502,8 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `GET /api/v1/admin/order_info` - полная информация о сделке и история статусов.
 - `GET /api/v1/admin/get_balance` - получение баланса кубышки платформы.
 - `POST /api/v1/admin/ban_user` - блокировка пользователя с сохранением причины.
-- `POST /api/v1/admin/unban_user` - разблокировка пользователя.
-- `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата.
-- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация выплаты.
+- `POST /api/v1/admin/orders/{order_id}/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата. Требует обязательное тело `{"reason": "Причина решения арбитра"}`.
+- `POST /api/v1/admin/orders/{order_id}/close_to_performer` - закрытие спора в пользу исполнителя и регистрация выплаты. Требует обязательное тело `{"reason": "Причина решения арбитра"}`.
 
 ## Платежный контур
 
@@ -517,8 +516,8 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 
 - `POST /api/v1/client/deal_create` - регистрация депозитной сделки.
 - `POST /api/v1/client/deal_confirm` - завершение платежа и регистрация payout.
-- `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата.
-- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout.
+- `POST /api/v1/admin/orders/{order_id}/close_to_client` - закрытие спора в пользу заказчика и возврат средств (реверс при AUTHORIZED, выплата при COMPLETED) с фиксацией `reason`.
+- `POST /api/v1/admin/orders/{order_id}/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout (с завершением списания при AUTHORIZED) с фиксацией `reason`.
 - `POST /v1/paygine/webhook_order_status` - синхронизация статусов операций Paygine с БД.
 
 ## Статусы сделок

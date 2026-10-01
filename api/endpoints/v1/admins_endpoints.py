@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from api.enums.enums_v1 import OrderStates
 from api.payments.payments_methods import get_balance as get_balance_method
 from api.schemas.schemas_v1 import (
+    AdminCloseDisputeRequest,
     AdminOrderInfoResponse,
     AdminOrdersResponse,
     AdminUserBanResponse,
@@ -99,18 +100,20 @@ async def get_balance(
 
 @router.post("/close_to_client")
 async def close_to_client(
+    data: AdminCloseDisputeRequest,
     order_id: int = Query(..., ge=1),
-    _authorized_admin_id: int = Depends(authorize_admin),
+    authorized_admin_id: int = Depends(authorize_admin),
 ) -> dict[str, bool]:
-    await close_order_to_client(order_id)
+    await close_order_to_client(order_id, authorized_admin_id, data.reason)
     return {"success": True}
 
 @router.post("/close_to_performer")
 async def close_to_performer(
+    data: AdminCloseDisputeRequest,
     order_id: int = Query(..., ge=1),
-    _authorized_admin_id: int = Depends(authorize_admin),
+    authorized_admin_id: int = Depends(authorize_admin),
 ) -> dict[str, bool]:
-    await close_order_to_performer(order_id)
+    await close_order_to_performer(order_id, authorized_admin_id, data.reason)
     return {"success": True}
 
 

@@ -8,13 +8,14 @@ import logging
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import EXPIRE_TIME_TO_COMNFIRM_MINUTES, PAYMENT_HOLD_DURATION_MINUTES
+from api.config import PAYMENT_HOLD_DURATION_MINUTES
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, ValidationError
 from api.payments.payments_methods import (
     complete_paymented_deal,
     refund_money,
     register_payout_deal,
+    reverse_paymented_deal,
 )
 from api.schemas.schemas_v1 import RegisterPayoutDealPaymentRequest, RefundMoneyPaymentRequest
 from api.utils.help_orders_method import (
@@ -32,7 +33,7 @@ from database.models.users import User
 
 EXPIRED_ORDER_BATCH_SIZE = 1000
 WORKER_SLEEP_SECONDS = 60
-EXPIRED_ORDER_ACTIONS = ("cancle", "confirm")
+EXPIRED_ORDER_ACTIONS = ("cancle", "confirm", "conflict_cancel")
 logger = logging.getLogger(__name__)
 
 
@@ -55,6 +56,18 @@ class ExpiredPayoutOrderData:
     performer_phone: str
     price: Decimal
     title: str
+
+
+@dataclass(frozen=True)
+class ExpiredConflictRefundOrderData:
+    current_status: OrderStates | str | None
+    client_id: int
+    customer_email: str
+    customer_phone: str
+    price: Decimal
+    title: str
+    paygine_payment_operation_id: int
+    payment_status: OrderPaymentStates | str | None
 
 
 def worker_check_allowed(now: datetime):
@@ -97,9 +110,9 @@ async def claim_expired_order_ids(
     session: AsyncSession,
     limit: int = EXPIRED_ORDER_BATCH_SIZE,
 ) -> dict[str, list[int]]:
-    """Получаем IDS сделок для отмены и подтверждения."""
+    """Получаем IDS сделок для отмены, подтверждения и отмены конфликта по истечении 3 дней."""
     checked_at = datetime.now(timezone.utc)
-    confirm_cutoff = checked_at - timedelta(minutes=float(EXPIRE_TIME_TO_COMNFIRM_MINUTES))
+    cutoff = checked_at - timedelta(minutes=float(EXPIRE_TIME_TO_COMNFIRM_MINUTES))
 
     return {
         "cancle": await claim_order_ids(
@@ -114,8 +127,19 @@ async def claim_expired_order_ids(
             session,
             Order.status == OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
             Order.completed_at.is_not(None),
-            Order.completed_at <= confirm_cutoff,
+            Order.completed_at <= cutoff,
             order_by=(Order.completed_at,),
+            checked_at=checked_at,
+            limit=limit,
+        ),
+        "conflict_cancel": await claim_order_ids(
+            session,
+            Order.status == OrderStates.AWAITING_CONFLICT.value,
+            or_(
+                and_(Order.client_declined_at.is_not(None), Order.client_declined_at <= cutoff),
+                and_(Order.client_declined_at.is_(None), Order.updated_at <= cutoff),
+            ),
+            order_by=(func.coalesce(Order.client_declined_at, Order.updated_at),),
             checked_at=checked_at,
             limit=limit,
         ),
@@ -129,6 +153,9 @@ async def expire_order(session: AsyncSession, order_id: int, act: str) -> None:
         return
     if act == "confirm":
         await expire_confirmed_order(session, order_id)
+        return
+    if act == "conflict_cancel":
+        await expire_conflict_cancelled_order(session, order_id)
         return
     raise ValidationError()
 
@@ -178,6 +205,119 @@ async def expire_confirmed_order(session: AsyncSession, order_id: int) -> None:
             payout_result.payment_values.paygine_payout_operation_id,
             payout_result.payment_values.expire_payout_at,
         )
+
+
+async def expire_conflict_cancelled_order(session: AsyncSession, order_id: int) -> None:
+    async with session.begin():
+        order_data = await get_expired_conflict_refund_data(session, order_id)
+        payment_status_val = (
+            order_data.payment_status.value
+            if isinstance(order_data.payment_status, OrderPaymentStates)
+            else order_data.payment_status
+        )
+        if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+            await reverse_paymented_deal(order_data.paygine_payment_operation_id)
+            await session.execute(
+                update(Order)
+                .where(Order.id == order_id)
+                .values(**order_status_values(OrderStates.CANCLED_BY_EXPIRE_TIME.value))
+            )
+            await add_order_status_history(
+                session,
+                order_id,
+                order_data.current_status,
+                OrderStates.CANCLED_BY_EXPIRE_TIME.value,
+                None,
+                comment="Автоматическая отмена сделки по истечении 3 дней молчания исполнителя",
+            )
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.order_id == order_id)
+                .values(
+                    payment_status=OrderPaymentStates.CANCELED.value,
+                    revoke_status=OrderPaymentStates.COMPLETED.value,
+                    revoked_at=func.now(),
+                    updated_at=func.now(),
+                )
+            )
+            return
+
+        refund_result = await refund_money(
+            RefundMoneyPaymentRequest(
+                order_id=order_id,
+                client_id=order_data.client_id,
+                customer_email=order_data.customer_email,
+                customer_phone=order_data.customer_phone,
+                amount=order_data.price,
+                description=order_data.title,
+            )
+        )
+        await set_expired_order_refund_status(
+            session,
+            order_id,
+            order_data.current_status,
+            refund_result.payment_values.paygine_payout_operation_id,
+        )
+
+
+async def get_expired_conflict_refund_data(
+    session: AsyncSession,
+    order_id: int,
+) -> ExpiredConflictRefundOrderData:
+    result = await session.execute(
+        select(
+            Order.status,
+            Order.client_id,
+            Order.price,
+            Order.title,
+            OrderPaymentData.paygine_payment_operation_id,
+            OrderPaymentData.payment_status,
+            OrderPaymentData.customer_email,
+            User.phone_number,
+        )
+        .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+        .join(User, User.id == Order.client_id)
+        .where(Order.id == order_id)
+        .with_for_update(of=(Order, OrderPaymentData))
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise OrderNotFoundError()
+
+    (
+        current_status,
+        client_id,
+        price,
+        title,
+        payment_operation_id,
+        payment_status,
+        customer_email,
+        customer_phone,
+    ) = row
+    if order_status_value(current_status) != OrderStates.AWAITING_CONFLICT.value:
+        raise ValidationError()
+    if payment_operation_id is None:
+        raise OrderNotFoundError()
+    payment_status_val = (
+        payment_status.value
+        if isinstance(payment_status, OrderPaymentStates)
+        else payment_status
+    )
+    if payment_status_val not in (
+        OrderPaymentStates.AUTHORIZED.value,
+        OrderPaymentStates.COMPLETED.value,
+    ):
+        raise ValidationError()
+    return ExpiredConflictRefundOrderData(
+        current_status=current_status,
+        client_id=client_id,
+        customer_email=customer_email,
+        customer_phone=customer_phone,
+        price=price,
+        title=title,
+        paygine_payment_operation_id=int(payment_operation_id),
+        payment_status=payment_status,
+    )
 
 
 async def get_expired_payment_order_data(
@@ -358,6 +498,7 @@ async def claim_authorized_payment_order_ids(
     """Выбираем заказы с захолдированной оплатой старше PAYMENT_HOLD_DURATION_MINUTES."""
     checked_at = datetime.now(timezone.utc)
     hold_cutoff = checked_at - timedelta(minutes=float(PAYMENT_HOLD_DURATION_MINUTES))
+    hold_start = func.greatest(OrderPaymentData.payment_authorized_at, Order.performer_connected_at)
 
     candidate_ids = (
         select(Order.id)
@@ -365,15 +506,15 @@ async def claim_authorized_payment_order_ids(
         .where(
             OrderPaymentData.payment_status == OrderPaymentStates.AUTHORIZED.value,
             OrderPaymentData.payment_authorized_at.is_not(None),
-            OrderPaymentData.payment_authorized_at <= hold_cutoff,
+            Order.performer_connected_at.is_not(None),
+            hold_start <= hold_cutoff,
             Order.status.not_in((
                 OrderStates.AWAITING_CONFLICT.value,
-                OrderStates.OPEN_CONFLICT.value,
                 *CLOSED_ORDER_STATUSES,
             )),
             worker_check_allowed(checked_at),
         )
-        .order_by(OrderPaymentData.payment_authorized_at, Order.id)
+        .order_by(hold_start, Order.id)
         .limit(limit)
         .with_for_update(skip_locked=True)
         .cte("candidate_authorized_orders")
@@ -422,7 +563,6 @@ async def complete_authorized_order_payment(
             current_payment_val != OrderPaymentStates.AUTHORIZED.value
             or order_status_value(current_order_status) in (
                 OrderStates.AWAITING_CONFLICT.value,
-                OrderStates.OPEN_CONFLICT.value,
                 *CLOSED_ORDER_STATUSES,
             )
         ):

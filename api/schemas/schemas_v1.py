@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.enums.enums_v1 import (
     OrderStates,
@@ -176,7 +176,12 @@ class AdminOrderStatusHistoryResponse(BaseModel):
     old_status: OrderStates | None
     new_status: OrderStates
     changed_by_user_id: int | None
+    comment: str | None = None
     created_at: datetime
+
+
+class AdminCloseDisputeRequest(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000, description="Причина решения арбитра")
 
 
 class AdminOrderInfoResponse(BaseModel):
@@ -203,6 +208,9 @@ class AdminOrderInfoResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None
+    performer_connected_at: datetime | None = None
+    client_declined_at: datetime | None = None
+    arbitration_reason: str | None = None
     status_history: list[AdminOrderStatusHistoryResponse]
 
 
@@ -249,6 +257,9 @@ class OrderInfoResponse(BaseModel):
     updated_at: datetime
     expire_in: datetime
     completed_at: datetime | None
+    performer_connected_at: datetime | None = None
+    client_declined_at: datetime | None = None
+    arbitration_reason: str | None = None
 
 
 class OrderInfoWithPaymentDataResponse(OrderInfoResponse):
