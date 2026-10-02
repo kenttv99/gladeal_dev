@@ -66,6 +66,7 @@ class ClientConfirmPaymentData:
     price: Decimal
     title: str
     paygine_payment_operation_id: int
+    payment_status: OrderPaymentStates | str | None
 
 
 @dataclass(frozen=True)
@@ -353,7 +354,10 @@ async def get_client_confirm_payment_data(
         raise ValidationError()
     if performer_phone is None:
         raise UserNotFoundError()
-    ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+    ensure_order_payment_status(
+        payment_status,
+        (OrderPaymentStates.AUTHORIZED, OrderPaymentStates.COMPLETED),
+    )
     return ClientConfirmPaymentData(
         current_status=current_status,
         performer_id=performer_id,
@@ -362,6 +366,7 @@ async def get_client_confirm_payment_data(
         price=price,
         title=title,
         paygine_payment_operation_id=int(payment_operation_id),
+        payment_status=payment_status,
     )
 
 

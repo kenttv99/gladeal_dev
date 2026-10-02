@@ -6,9 +6,13 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
-from api.exceptions import PaymentInvalidProviderSignatureError, ValidationError
+from api.exceptions import (
+    AccountDeletionBlockedByActiveOrdersError,
+    PaymentInvalidProviderSignatureError,
+    ValidationError,
+)
 from api.payments.auth_methods import build_signature
-from api.utils import orders_methods
+from api.utils import orders_methods, users_methods
 from api.utils.help_orders_method import (
     get_performer_decline_refund_data,
     set_client_refund_order_status,
@@ -631,6 +635,104 @@ class GetOrderPaymentOperationIdGuardTest(unittest.IsolatedAsyncioTestCase):
 
         op_id = await orders_methods.get_order_payment_operation_id(order_id=1, client_id=10)
         self.assertEqual(op_id, 12345)
+
+
+class ClientConfirmOrderAuthorizedHoldTest(unittest.IsolatedAsyncioTestCase):
+    @patch("api.utils.orders_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.register_payout_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.get_client_confirm_payment_data", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.set_client_confirmed_order_status", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_client_confirm_captures_authorized_hold(
+        self,
+        mock_session_local,
+        mock_set_status,
+        mock_get_confirm_data,
+        mock_register_payout,
+        mock_complete_payment,
+    ):
+        mock_session = FakeSession(execute_results=[None])
+        mock_session_local.return_value = mock_session
+        mock_get_confirm_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            performer_id=20,
+            performer_email="performer@example.com",
+            performer_phone="+79997654321",
+            price=2500,
+            title="Design logo",
+            paygine_payment_operation_id=123,
+            payment_status=OrderPaymentStates.AUTHORIZED.value,
+        )
+        mock_register_payout.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="payout_op_88",
+                expire_payout_at=None,
+            )
+        )
+
+        await orders_methods.client_confirm_order(order_id=1, client_id=10)
+
+        mock_complete_payment.assert_awaited_once_with(123)
+        mock_register_payout.assert_awaited_once()
+        mock_set_status.assert_awaited_once()
+
+    @patch("api.utils.orders_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.register_payout_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.get_client_confirm_payment_data", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.set_client_confirmed_order_status", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_client_confirm_completed_proceeds_directly(
+        self,
+        mock_session_local,
+        mock_set_status,
+        mock_get_confirm_data,
+        mock_register_payout,
+        mock_complete_payment,
+    ):
+        mock_session = FakeSession(execute_results=[None])
+        mock_session_local.return_value = mock_session
+        mock_get_confirm_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            performer_id=20,
+            performer_email="performer@example.com",
+            performer_phone="+79997654321",
+            price=2500,
+            title="Design logo",
+            paygine_payment_operation_id=123,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+        )
+        mock_register_payout.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="payout_op_88",
+                expire_payout_at=None,
+            )
+        )
+
+        await orders_methods.client_confirm_order(order_id=1, client_id=10)
+
+        mock_complete_payment.assert_not_called()
+        mock_register_payout.assert_awaited_once()
+        mock_set_status.assert_awaited_once()
+
+
+class AccountDeletionGuardTest(unittest.IsolatedAsyncioTestCase):
+    def test_payout_statuses_included_in_blocking_statuses(self):
+        self.assertIn(
+            OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+            users_methods.ACCOUNT_DELETION_BLOCKING_STATUSES,
+        )
+        self.assertIn(
+            OrderStates.AWAITING_CLIENT_PAYOUT.value,
+            users_methods.ACCOUNT_DELETION_BLOCKING_STATUSES,
+        )
+
+    @patch("api.utils.users_methods.AsyncSessionLocal")
+    async def test_account_deletion_blocked_when_active_order_exists(self, mock_session_local):
+        fake_session = FakeSession(scalar_results=[True])
+        mock_session_local.return_value = fake_session
+
+        with self.assertRaises(AccountDeletionBlockedByActiveOrdersError):
+            await users_methods.delete_account(user_id=1)
 
 
 if __name__ == "__main__":

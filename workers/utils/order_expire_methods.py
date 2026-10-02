@@ -61,6 +61,7 @@ class ExpiredPayoutOrderData:
     performer_phone: str
     price: Decimal
     title: str
+    payment_status: OrderPaymentStates | str | None
 
 
 def worker_check_allowed(now: datetime):
@@ -171,6 +172,23 @@ async def expire_cancled_order(session: AsyncSession, order_id: int) -> None:
 async def expire_confirmed_order(session: AsyncSession, order_id: int) -> None:
     async with session.begin():
         order_data = await get_expired_payout_order_data(session, order_id)
+        payment_status_val = (
+            order_data.payment_status.value
+            if isinstance(order_data.payment_status, OrderPaymentStates)
+            else order_data.payment_status
+        )
+        if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+            await complete_paymented_deal(order_data.paygine_payment_operation_id)
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.order_id == order_id)
+                .values(
+                    payment_status=OrderPaymentStates.COMPLETED.value,
+                    payment_complete_at=func.now(),
+                    updated_at=func.now(),
+                )
+            )
+
         payout_result = await register_payout_deal(
             RegisterPayoutDealPaymentRequest(
                 order_id=order_id,
@@ -372,7 +390,10 @@ async def get_expired_payout_order_data(
         raise ValidationError()
     if payment_operation_id is None or payout_operation_id is not None:
         raise OrderNotFoundError()
-    ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+    ensure_order_payment_status(
+        payment_status,
+        (OrderPaymentStates.AUTHORIZED, OrderPaymentStates.COMPLETED),
+    )
     return ExpiredPayoutOrderData(
         current_status=current_status,
         paygine_payment_operation_id=int(payment_operation_id),
@@ -381,6 +402,7 @@ async def get_expired_payout_order_data(
         performer_phone=performer_phone,
         price=price,
         title=title,
+        payment_status=payment_status,
     )
 
 

@@ -18,6 +18,7 @@ from workers.utils.order_expire_methods import (
     EXPIRED_ORDER_ACTIONS,
     claim_expired_order_ids,
     expire_cancled_order,
+    expire_confirmed_order,
     expire_conflict_cancelled_order,
     process_expired_orders,
 )
@@ -469,6 +470,82 @@ class WorkerConflictCancelExpirationTest(unittest.IsolatedAsyncioTestCase):
             "refund_op_99",
             comment="Автоматическая отмена сделки по истечении времени подтверждения исполнителем",
         )
+
+    @patch("workers.utils.order_expire_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.register_payout_deal", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.get_expired_payout_order_data", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.set_expired_order_payout_status", new_callable=AsyncMock)
+    async def test_expire_confirmed_order_authorized_captures_hold(
+        self,
+        mock_set_status,
+        mock_get_payout_data,
+        mock_register_payout,
+        mock_complete_payment,
+    ):
+        mock_session = FakeSession(execute_results=[None])
+        mock_get_payout_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            paygine_payment_operation_id=123,
+            performer_id=20,
+            performer_email="performer@example.com",
+            performer_phone="+79997654321",
+            price=2000,
+            title="Design logo",
+            payment_status=OrderPaymentStates.AUTHORIZED.value,
+        )
+        mock_register_payout.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="payout_op_77",
+                expire_payout_at=None,
+            )
+        )
+
+        await expire_confirmed_order(mock_session, 1)
+
+        mock_complete_payment.assert_awaited_once_with(123)
+        mock_register_payout.assert_awaited_once()
+        mock_set_status.assert_awaited_once_with(
+            mock_session,
+            1,
+            OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            "payout_op_77",
+            None,
+        )
+
+    @patch("workers.utils.order_expire_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.register_payout_deal", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.get_expired_payout_order_data", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.set_expired_order_payout_status", new_callable=AsyncMock)
+    async def test_expire_confirmed_order_completed_proceeds_directly(
+        self,
+        mock_set_status,
+        mock_get_payout_data,
+        mock_register_payout,
+        mock_complete_payment,
+    ):
+        mock_session = FakeSession(execute_results=[None])
+        mock_get_payout_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            paygine_payment_operation_id=123,
+            performer_id=20,
+            performer_email="performer@example.com",
+            performer_phone="+79997654321",
+            price=2000,
+            title="Design logo",
+            payment_status=OrderPaymentStates.COMPLETED.value,
+        )
+        mock_register_payout.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="payout_op_77",
+                expire_payout_at=None,
+            )
+        )
+
+        await expire_confirmed_order(mock_session, 1)
+
+        mock_complete_payment.assert_not_called()
+        mock_register_payout.assert_awaited_once()
+        mock_set_status.assert_awaited_once()
 
     @patch("workers.utils.order_expire_methods.claim_expired_order_ids")
     @patch("workers.utils.order_expire_methods.expire_order", new_callable=AsyncMock)

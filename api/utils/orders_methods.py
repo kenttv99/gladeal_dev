@@ -369,6 +369,23 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
     async with AsyncSessionLocal() as session:
         async with session.begin():
             payment_data = await get_client_confirm_payment_data(session, order_id, client_id)
+            payment_status_val = (
+                payment_data.payment_status.value
+                if isinstance(payment_data.payment_status, OrderPaymentStates)
+                else payment_data.payment_status
+            )
+            if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+                await complete_paymented_deal(payment_data.paygine_payment_operation_id)
+                await session.execute(
+                    update(OrderPaymentData)
+                    .where(OrderPaymentData.order_id == order_id)
+                    .values(
+                        payment_status=OrderPaymentStates.COMPLETED.value,
+                        payment_complete_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
+
             payout_result = await register_payout_deal(
                 RegisterPayoutDealPaymentRequest(
                     order_id=order_id,

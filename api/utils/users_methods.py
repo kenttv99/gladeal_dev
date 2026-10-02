@@ -40,16 +40,10 @@ from database.config import AsyncSessionLocal
 from database.models.notifications import Notification
 from database.models.orders import Order, OrderStatusHistory
 from database.models.users import KYCData, User
+from api.utils.help_orders_method import ACTIVE_ORDER_STATUSES
 
 
-ACCOUNT_DELETION_BLOCKING_STATUSES = (
-    OrderStates.AWAITING_PERFORMER.value,
-    OrderStates.AWAITING_PAYMENT.value,
-    OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
-    OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
-    OrderStates.AWAITING_CONFLICT.value,
-    OrderStates.OPEN_CONFLICT.value,
-)
+ACCOUNT_DELETION_BLOCKING_STATUSES = ACTIVE_ORDER_STATUSES
 
 
 async def register_user(
