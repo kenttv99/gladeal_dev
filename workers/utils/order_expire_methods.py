@@ -5,10 +5,10 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import logging
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.config import PAYMENT_HOLD_DURATION_MINUTES
+from api.config import EXPIRE_TIME_TO_COMNFIRM_MINUTES, PAYMENT_HOLD_DURATION_MINUTES
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import OrderNotFoundError, ValidationError
 from api.payments.payments_methods import (

@@ -56,6 +56,12 @@ class FakeSession:
             return self.scalar_results.pop(0)
         return None
 
+    async def scalars(self, statement):
+        self.statements.append(statement)
+        if self.scalar_results:
+            return self.scalar_results.pop(0)
+        return FakeResult([])
+
 
 class OrderExpirationTimingTest(unittest.TestCase):
     def test_three_days_cutoff_matches_config(self):
@@ -384,3 +390,18 @@ class WorkerConflictCancelExpirationTest(unittest.IsolatedAsyncioTestCase):
             OrderStates.AWAITING_CONFLICT.value,
             "refund_op_88",
         )
+
+    async def test_claim_expired_order_ids_collects_batches(self):
+        fake_session = FakeSession(
+            scalar_results=[
+                FakeResult([10, 11]),
+                FakeResult([20]),
+                FakeResult([30, 31, 32]),
+            ]
+        )
+        result = await claim_expired_order_ids(fake_session, limit=50)
+
+        self.assertEqual(result["cancle"], [10, 11])
+        self.assertEqual(result["confirm"], [20])
+        self.assertEqual(result["conflict_cancel"], [30, 31, 32])
+        self.assertEqual(len(fake_session.statements), 3)
