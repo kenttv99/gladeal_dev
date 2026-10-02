@@ -633,9 +633,10 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
                 if isinstance(payment_status, OrderPaymentStates)
                 else payment_status
             )
-            if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
-                if payment_operation_id is None:
-                    raise OrderNotFoundError()
+            if (
+                payment_status_val == OrderPaymentStates.AUTHORIZED.value
+                and payment_operation_id is not None
+            ):
                 await complete_paymented_deal(int(payment_operation_id))
                 await session.execute(
                     update(OrderPaymentData)

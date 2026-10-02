@@ -21,9 +21,11 @@ from api.utils.help_orders_method import (
 )
 from api.utils.order_status_webhook_methods import (
     WebhookOrderOperation,
+    calculate_delayed_order_expire_in,
     get_webhook_payout_completed_order_status,
     get_webhook_refund_completed_order_status,
     read_order_status_webhook_payload,
+    set_webhook_payment_authorized,
     set_webhook_payout_completed,
     set_webhook_refund_completed,
 )
@@ -907,6 +909,111 @@ class AccountDeletionGuardTest(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(AccountDeletionBlockedByActiveOrdersError):
             await users_methods.delete_account(user_id=1)
+
+
+class DelayedPaymentExpireInShiftTest(unittest.IsolatedAsyncioTestCase):
+    def test_calculate_delayed_order_expire_in_within_3_hours_no_shift(self):
+        created_at = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+        expire_in = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        payment_at = datetime(2026, 10, 1, 14, 30, tzinfo=timezone.utc)
+
+        result = calculate_delayed_order_expire_in(created_at, expire_in, payment_at)
+        self.assertEqual(result, expire_in)
+
+    def test_calculate_delayed_order_expire_in_exactly_3_hours_no_shift(self):
+        created_at = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+        expire_in = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        payment_at = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
+
+        result = calculate_delayed_order_expire_in(created_at, expire_in, payment_at)
+        self.assertEqual(result, expire_in)
+
+    def test_calculate_delayed_order_expire_in_after_3_hours_shifts_by_excess(self):
+        created_at = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+        expire_in = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+        payment_at = datetime(2026, 10, 1, 17, 0, tzinfo=timezone.utc)
+
+        # Elapsed = 5h, threshold = 3h, delay = 2h
+        result = calculate_delayed_order_expire_in(created_at, expire_in, payment_at)
+        expected = expire_in + timedelta(hours=2)
+        self.assertEqual(result, expected)
+
+    def test_calculate_delayed_order_expire_in_tester_scenario(self):
+        created_at = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+        expire_in = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        payment_at = datetime(2026, 10, 3, 11, 50, tzinfo=timezone.utc)
+
+        # Elapsed = 47h 50m, threshold = 3h, delay = 44h 50m
+        result = calculate_delayed_order_expire_in(created_at, expire_in, payment_at)
+        expected = expire_in + timedelta(hours=44, minutes=50)
+        self.assertEqual(result, expected)
+
+    @patch("api.utils.order_status_webhook_methods.add_order_status_history", new_callable=AsyncMock)
+    async def test_set_webhook_payment_authorized_shifts_expire_in_when_delayed(self, mock_history):
+        session = FakeSession()
+        now = datetime.now(timezone.utc)
+        created_at = now - timedelta(hours=10)
+        original_expire_in = now + timedelta(hours=24)
+
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.AWAITING_PAYMENT.value,
+            payment_status=OrderPaymentStates.REGISTERED.value,
+            payout_status=None,
+            revoke_status=None,
+            payment_operation_id=100,
+            operation_type="payment",
+            created_at=created_at,
+            expire_in=original_expire_in,
+        )
+
+        await set_webhook_payment_authorized(session, operation)
+
+        # Statement 0: update OrderPaymentData
+        # Statement 1: update Order (must have shifted expire_in and new status)
+        self.assertEqual(len(session.statements), 2)
+        order_update_params = compiled_params(session.statements[1])
+        self.assertEqual(
+            order_update_params["status"],
+            OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+        )
+        self.assertIn("expire_in", order_update_params)
+        expected_min = original_expire_in + timedelta(hours=6, minutes=59)
+        expected_max = original_expire_in + timedelta(hours=7, minutes=1)
+        self.assertTrue(expected_min <= order_update_params["expire_in"] <= expected_max)
+        mock_history.assert_awaited_once()
+
+    @patch("api.utils.order_status_webhook_methods.add_order_status_history", new_callable=AsyncMock)
+    async def test_set_webhook_payment_authorized_does_not_shift_when_within_grace_period(self, mock_history):
+        session = FakeSession()
+        now = datetime.now(timezone.utc)
+        created_at = now - timedelta(hours=1)
+        original_expire_in = now + timedelta(hours=24)
+
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.AWAITING_PAYMENT.value,
+            payment_status=OrderPaymentStates.REGISTERED.value,
+            payout_status=None,
+            revoke_status=None,
+            payment_operation_id=100,
+            operation_type="payment",
+            created_at=created_at,
+            expire_in=original_expire_in,
+        )
+
+        await set_webhook_payment_authorized(session, operation)
+
+        self.assertEqual(len(session.statements), 2)
+        order_update_params = compiled_params(session.statements[1])
+        self.assertEqual(
+            order_update_params["status"],
+            OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+        )
+        self.assertNotIn("expire_in", order_update_params)
+        mock_history.assert_awaited_once()
 
 
 if __name__ == "__main__":

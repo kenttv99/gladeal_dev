@@ -672,14 +672,17 @@ class PerformerConflictOrderTest(unittest.IsolatedAsyncioTestCase):
         mock_complete.assert_not_called()
         mock_history.assert_awaited_once()
 
+    @patch("api.utils.orders_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.add_order_status_history", new_callable=AsyncMock)
     @patch("api.utils.orders_methods.ensure_user_exists", new_callable=AsyncMock)
     @patch("api.utils.orders_methods.AsyncSessionLocal")
-    async def test_performer_conflict_authorized_missing_op_id_raises(
+    async def test_performer_conflict_authorized_missing_op_id_skips_complete(
         self,
         mock_session_local,
         mock_ensure_user,
+        mock_history,
+        mock_complete,
     ):
-        from api.exceptions import OrderNotFoundError
         from api.utils import orders_methods
 
         fake_row = (
@@ -688,10 +691,12 @@ class PerformerConflictOrderTest(unittest.IsolatedAsyncioTestCase):
             OrderPaymentStates.AUTHORIZED.value,
             None,
         )
-        fake_session = FakeSession(execute_results=[FakeResult(fake_row)])
+        fake_session = FakeSession(execute_results=[FakeResult(fake_row), None])
         mock_session_local.return_value = fake_session
 
-        with self.assertRaises(OrderNotFoundError):
-            await orders_methods.performer_conflict_order(1, 20)
+        await orders_methods.performer_conflict_order(1, 20)
+
+        mock_complete.assert_not_called()
+        mock_history.assert_awaited_once()
 
 
