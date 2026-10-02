@@ -17,7 +17,9 @@ from workers.utils import order_expire_methods
 from workers.utils.order_expire_methods import (
     EXPIRED_ORDER_ACTIONS,
     claim_expired_order_ids,
+    expire_cancled_order,
     expire_conflict_cancelled_order,
+    process_expired_orders,
 )
 
 
@@ -396,7 +398,96 @@ class WorkerConflictCancelExpirationTest(unittest.IsolatedAsyncioTestCase):
             1,
             OrderStates.AWAITING_CONFLICT.value,
             "refund_op_88",
+            comment="Автоматическая отмена сделки по истечении 3 дней молчания исполнителя",
         )
+
+    @patch("workers.utils.order_expire_methods.reverse_paymented_deal", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.refund_money", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.get_expired_payment_order_data", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.add_order_status_history", new_callable=AsyncMock)
+    async def test_expire_cancled_order_authorized(
+        self,
+        mock_history,
+        mock_get_refund_data,
+        mock_refund_money,
+        mock_reverse,
+    ):
+        mock_session = FakeSession(execute_results=[None, None])
+        mock_get_refund_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+            client_id=10,
+            customer_email="client@example.com",
+            customer_phone="+79991234567",
+            price=1500,
+            title="Design logo",
+            paygine_payment_operation_id=123,
+            payment_status=OrderPaymentStates.AUTHORIZED.value,
+        )
+
+        await expire_cancled_order(mock_session, 1)
+
+        mock_reverse.assert_awaited_once_with(123)
+        mock_refund_money.assert_not_called()
+        mock_history.assert_awaited_once()
+
+    @patch("workers.utils.order_expire_methods.reverse_paymented_deal", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.refund_money", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.get_expired_payment_order_data", new_callable=AsyncMock)
+    @patch("workers.utils.order_expire_methods.set_expired_order_refund_status", new_callable=AsyncMock)
+    async def test_expire_cancled_order_completed(
+        self,
+        mock_set_status,
+        mock_get_refund_data,
+        mock_refund_money,
+        mock_reverse,
+    ):
+        mock_session = FakeSession(execute_results=[None, None])
+        mock_get_refund_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+            client_id=10,
+            customer_email="client@example.com",
+            customer_phone="+79991234567",
+            price=1500,
+            title="Design logo",
+            paygine_payment_operation_id=123,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+        )
+        mock_refund_money.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="refund_op_99",
+            )
+        )
+
+        await expire_cancled_order(mock_session, 1)
+
+        mock_reverse.assert_not_called()
+        mock_refund_money.assert_awaited_once()
+        mock_set_status.assert_awaited_once_with(
+            mock_session,
+            1,
+            OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
+            "refund_op_99",
+            comment="Автоматическая отмена сделки по истечении времени подтверждения исполнителем",
+        )
+
+    @patch("workers.utils.order_expire_methods.claim_expired_order_ids")
+    @patch("workers.utils.order_expire_methods.expire_order", new_callable=AsyncMock)
+    async def test_process_expired_orders_continues_on_exception(
+        self,
+        mock_expire_order,
+        mock_claim,
+    ):
+        mock_claim.side_effect = [
+            {"cancle": [1, 2], "confirm": [], "conflict_cancel": []},
+            {"cancle": [], "confirm": [], "conflict_cancel": []},
+        ]
+        mock_expire_order.side_effect = [RuntimeError("Paygine gateway error"), None]
+
+        fake_session = FakeSession()
+        processed = await process_expired_orders(fake_session)
+
+        self.assertEqual(processed["cancle"], 1)
+        self.assertEqual(mock_expire_order.await_count, 2)
 
     async def test_claim_expired_order_ids_collects_batches(self):
         fake_session = FakeSession(

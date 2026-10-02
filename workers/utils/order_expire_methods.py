@@ -45,6 +45,11 @@ class ExpiredRefundOrderData:
     customer_phone: str
     price: Decimal
     title: str
+    paygine_payment_operation_id: int
+    payment_status: OrderPaymentStates | str | None
+
+
+ExpiredConflictRefundOrderData = ExpiredRefundOrderData
 
 
 @dataclass(frozen=True)
@@ -56,18 +61,6 @@ class ExpiredPayoutOrderData:
     performer_phone: str
     price: Decimal
     title: str
-
-
-@dataclass(frozen=True)
-class ExpiredConflictRefundOrderData:
-    current_status: OrderStates | str | None
-    client_id: int
-    customer_email: str
-    customer_phone: str
-    price: Decimal
-    title: str
-    paygine_payment_operation_id: int
-    payment_status: OrderPaymentStates | str | None
 
 
 def worker_check_allowed(now: datetime):
@@ -167,21 +160,11 @@ async def expire_cancled_order(session: AsyncSession, order_id: int) -> None:
             order_id,
             OrderStates.AWAITING_PERFORMER_CONFIRMATION.value,
         )
-        refund_result = await refund_money(
-            RefundMoneyPaymentRequest(
-                order_id=order_id,
-                client_id=order_data.client_id,
-                customer_email=order_data.customer_email,
-                customer_phone=order_data.customer_phone,
-                amount=order_data.price,
-                description=order_data.title,
-            )
-        )
-        await set_expired_order_refund_status(
+        await cancel_or_refund_expired_order(
             session,
             order_id,
-            order_data.current_status,
-            refund_result.payment_values.paygine_payout_operation_id,
+            order_data,
+            comment="Автоматическая отмена сделки по истечении времени подтверждения исполнителем",
         )
 
 
@@ -210,113 +193,79 @@ async def expire_confirmed_order(session: AsyncSession, order_id: int) -> None:
 async def expire_conflict_cancelled_order(session: AsyncSession, order_id: int) -> None:
     async with session.begin():
         order_data = await get_expired_conflict_refund_data(session, order_id)
-        payment_status_val = (
-            order_data.payment_status.value
-            if isinstance(order_data.payment_status, OrderPaymentStates)
-            else order_data.payment_status
+        await cancel_or_refund_expired_order(
+            session,
+            order_id,
+            order_data,
+            comment="Автоматическая отмена сделки по истечении 3 дней молчания исполнителя",
         )
-        if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
-            await reverse_paymented_deal(order_data.paygine_payment_operation_id)
-            await session.execute(
-                update(Order)
-                .where(Order.id == order_id)
-                .values(**order_status_values(OrderStates.CANCLED_BY_EXPIRE_TIME.value))
-            )
-            await add_order_status_history(
-                session,
-                order_id,
-                order_data.current_status,
-                OrderStates.CANCLED_BY_EXPIRE_TIME.value,
-                None,
-                comment="Автоматическая отмена сделки по истечении 3 дней молчания исполнителя",
-            )
-            await session.execute(
-                update(OrderPaymentData)
-                .where(OrderPaymentData.order_id == order_id)
-                .values(
-                    payment_status=OrderPaymentStates.CANCELED.value,
-                    revoke_status=OrderPaymentStates.COMPLETED.value,
-                    revoked_at=func.now(),
-                    updated_at=func.now(),
-                )
-            )
-            return
 
-        refund_result = await refund_money(
-            RefundMoneyPaymentRequest(
-                order_id=order_id,
-                client_id=order_data.client_id,
-                customer_email=order_data.customer_email,
-                customer_phone=order_data.customer_phone,
-                amount=order_data.price,
-                description=order_data.title,
-            )
+
+async def cancel_or_refund_expired_order(
+    session: AsyncSession,
+    order_id: int,
+    order_data: ExpiredRefundOrderData,
+    comment: str,
+) -> None:
+    payment_status_val = (
+        order_data.payment_status.value
+        if isinstance(order_data.payment_status, OrderPaymentStates)
+        else order_data.payment_status
+    )
+    if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+        await reverse_paymented_deal(order_data.paygine_payment_operation_id)
+        await session.execute(
+            update(Order)
+            .where(Order.id == order_id)
+            .values(**order_status_values(OrderStates.CANCLED_BY_EXPIRE_TIME.value))
         )
-        await set_expired_order_refund_status(
+        await add_order_status_history(
             session,
             order_id,
             order_data.current_status,
-            refund_result.payment_values.paygine_payout_operation_id,
+            OrderStates.CANCLED_BY_EXPIRE_TIME.value,
+            None,
+            comment=comment,
         )
+        await session.execute(
+            update(OrderPaymentData)
+            .where(OrderPaymentData.order_id == order_id)
+            .values(
+                payment_status=OrderPaymentStates.CANCELED.value,
+                revoke_status=OrderPaymentStates.COMPLETED.value,
+                revoked_at=func.now(),
+                updated_at=func.now(),
+            )
+        )
+        return
+
+    refund_result = await refund_money(
+        RefundMoneyPaymentRequest(
+            order_id=order_id,
+            client_id=order_data.client_id,
+            customer_email=order_data.customer_email,
+            customer_phone=order_data.customer_phone,
+            amount=order_data.price,
+            description=order_data.title,
+        )
+    )
+    await set_expired_order_refund_status(
+        session,
+        order_id,
+        order_data.current_status,
+        refund_result.payment_values.paygine_payout_operation_id,
+        comment=comment,
+    )
 
 
 async def get_expired_conflict_refund_data(
     session: AsyncSession,
     order_id: int,
-) -> ExpiredConflictRefundOrderData:
-    result = await session.execute(
-        select(
-            Order.status,
-            Order.client_id,
-            Order.price,
-            Order.title,
-            OrderPaymentData.paygine_payment_operation_id,
-            OrderPaymentData.payment_status,
-            OrderPaymentData.customer_email,
-            User.phone_number,
-        )
-        .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
-        .join(User, User.id == Order.client_id)
-        .where(Order.id == order_id)
-        .with_for_update(of=(Order, OrderPaymentData))
-    )
-    row = result.one_or_none()
-    if row is None:
-        raise OrderNotFoundError()
-
-    (
-        current_status,
-        client_id,
-        price,
-        title,
-        payment_operation_id,
-        payment_status,
-        customer_email,
-        customer_phone,
-    ) = row
-    if order_status_value(current_status) != OrderStates.AWAITING_CONFLICT.value:
-        raise ValidationError()
-    if payment_operation_id is None:
-        raise OrderNotFoundError()
-    payment_status_val = (
-        payment_status.value
-        if isinstance(payment_status, OrderPaymentStates)
-        else payment_status
-    )
-    if payment_status_val not in (
-        OrderPaymentStates.AUTHORIZED.value,
-        OrderPaymentStates.COMPLETED.value,
-    ):
-        raise ValidationError()
-    return ExpiredConflictRefundOrderData(
-        current_status=current_status,
-        client_id=client_id,
-        customer_email=customer_email,
-        customer_phone=customer_phone,
-        price=price,
-        title=title,
-        paygine_payment_operation_id=int(payment_operation_id),
-        payment_status=payment_status,
+) -> ExpiredRefundOrderData:
+    return await get_expired_payment_order_data(
+        session,
+        order_id,
+        OrderStates.AWAITING_CONFLICT.value,
     )
 
 
@@ -359,7 +308,16 @@ async def get_expired_payment_order_data(
         raise ValidationError()
     if payment_operation_id is None:
         raise OrderNotFoundError()
-    ensure_order_payment_status(payment_status, OrderPaymentStates.COMPLETED)
+    payment_status_val = (
+        payment_status.value
+        if isinstance(payment_status, OrderPaymentStates)
+        else payment_status
+    )
+    if payment_status_val not in (
+        OrderPaymentStates.AUTHORIZED.value,
+        OrderPaymentStates.COMPLETED.value,
+    ):
+        raise ValidationError()
     return ExpiredRefundOrderData(
         current_status=current_status,
         client_id=client_id,
@@ -367,6 +325,8 @@ async def get_expired_payment_order_data(
         customer_phone=customer_phone,
         price=price,
         title=title,
+        paygine_payment_operation_id=int(payment_operation_id),
+        payment_status=payment_status,
     )
 
 
@@ -429,6 +389,7 @@ async def set_expired_order_refund_status(
     order_id: int,
     current_status: OrderStates | str | None,
     refund_operation_id: str,
+    comment: str | None = None,
 ) -> None:
     await set_client_refund_order_status(
         session,
@@ -436,6 +397,7 @@ async def set_expired_order_refund_status(
         current_status,
         None,
         refund_operation_id,
+        comment=comment,
     )
 
 
@@ -487,6 +449,8 @@ async def process_expired_orders(session: AsyncSession) -> dict[str, int]:
                     await expire_order(session, order_id, act)
                 except (OrderNotFoundError, ValidationError):
                     logger.info("Skipped expired order %s with action %s", order_id, act)
+                except Exception:
+                    logger.exception("Failed to process expired order %s with action %s", order_id, act)
                 else:
                     processed[act] += 1
 

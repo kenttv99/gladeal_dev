@@ -674,6 +674,7 @@ async def set_client_refund_order_status(
     current_status: OrderStates | str | None,
     client_id: int | None,
     refund_operation_id: str,
+    comment: str | None = None,
 ) -> None:
     await session.execute(
         update(Order)
@@ -686,6 +687,7 @@ async def set_client_refund_order_status(
         current_status,
         OrderStates.AWAITING_CLIENT_PAYOUT.value,
         client_id,
+        comment=comment,
     )
     await session.execute(
         update(OrderPaymentData)

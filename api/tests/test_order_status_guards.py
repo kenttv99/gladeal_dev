@@ -607,5 +607,32 @@ class OrderStatusSetterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.statements, [])
 
 
+class GetOrderPaymentOperationIdGuardTest(unittest.IsolatedAsyncioTestCase):
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_rejects_when_status_is_awaiting_performer(self, mock_session_local):
+        fake_row = (12345, OrderPaymentStates.REGISTERED.value, OrderStates.AWAITING_PERFORMER.value, None)
+        mock_session_local.return_value = FakeSession(execute_results=[FakeResult(fake_row)])
+
+        with self.assertRaises(ValidationError):
+            await orders_methods.get_order_payment_operation_id(order_id=1, client_id=10)
+
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_rejects_when_performer_id_is_none(self, mock_session_local):
+        fake_row = (12345, OrderPaymentStates.REGISTERED.value, OrderStates.AWAITING_PAYMENT.value, None)
+        mock_session_local.return_value = FakeSession(execute_results=[FakeResult(fake_row)])
+
+        with self.assertRaises(ValidationError):
+            await orders_methods.get_order_payment_operation_id(order_id=1, client_id=10)
+
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_accepts_when_awaiting_payment_with_performer(self, mock_session_local):
+        fake_row = (12345, OrderPaymentStates.REGISTERED.value, OrderStates.AWAITING_PAYMENT.value, 20)
+        mock_session_local.return_value = FakeSession(execute_results=[FakeResult(fake_row)])
+
+        op_id = await orders_methods.get_order_payment_operation_id(order_id=1, client_id=10)
+        self.assertEqual(op_id, 12345)
+
+
 if __name__ == "__main__":
     unittest.main()
+
