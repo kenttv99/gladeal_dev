@@ -345,6 +345,65 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             "20",
         )
 
+    async def test_performer_decline_from_awaiting_conflict_after_hold_authorized_completes_payment(self):
+        session = FakeSession()
+        old_time = datetime.now(timezone.utc) - timedelta(minutes=10)
+        with (
+            patch.object(orders_methods, "AsyncSessionLocal", return_value=session),
+            patch.object(
+                orders_methods,
+                "get_performer_decline_refund_data",
+                new=AsyncMock(
+                    return_value=(
+                        10,
+                        SimpleNamespace(
+                            current_status=OrderStates.AWAITING_CONFLICT.value,
+                            client_id=2,
+                            customer_email="client@example.com",
+                            customer_phone="+79990000000",
+                            price=100,
+                            title="Order",
+                            payment_operation_id=10,
+                            payment_status=OrderPaymentStates.AUTHORIZED.value,
+                            payment_authorized_at=old_time,
+                            performer_connected_at=old_time,
+                        ),
+                    )
+                ),
+            ),
+            patch.object(orders_methods, "get_client_cancel_request_time", new=AsyncMock(return_value=datetime.now(timezone.utc))),
+            patch.object(orders_methods, "cancle_unpayment_deal", new=AsyncMock()) as cancel,
+            patch.object(orders_methods, "complete_paymented_deal", new=AsyncMock()) as complete,
+            patch.object(orders_methods, "reverse_paymented_deal", new=AsyncMock()) as reverse,
+            patch.object(
+                orders_methods,
+                "refund_money",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(
+                        payment_values=SimpleNamespace(paygine_payout_operation_id="20")
+                    )
+                ),
+            ) as refund,
+            patch.object(
+                orders_methods,
+                "set_performer_declined_order_status",
+                new=AsyncMock(),
+            ) as set_status,
+        ):
+            await orders_methods.performer_decline_order(1, 3)
+
+        cancel.assert_not_awaited()
+        reverse.assert_not_awaited()
+        complete.assert_awaited_once_with(10)
+        refund.assert_awaited_once()
+        set_status.assert_awaited_once_with(
+            session,
+            1,
+            OrderStates.AWAITING_CONFLICT.value,
+            3,
+            "20",
+        )
+
     async def test_performer_decline_from_active_paid_status(self):
         session = FakeSession()
         with (

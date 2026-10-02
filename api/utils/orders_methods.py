@@ -472,23 +472,34 @@ async def performer_decline_order(order_id: int, performer_id: int) -> None:
                 else refund_data.payment_status
             )
             op_id = getattr(refund_data, "payment_operation_id", None)
-            if (
-                payment_status_val == OrderPaymentStates.AUTHORIZED.value
-                and is_cancellation_within_hold_duration(
-                    refund_data.payment_authorized_at,
-                    client_cancel_at,
-                    getattr(refund_data, "performer_connected_at", None),
-                )
-                and op_id is not None
-            ):
-                await reverse_paymented_deal(op_id)
-                await set_reversed_order_status(
-                    session,
-                    order_id,
-                    refund_data.current_status,
-                    performer_id,
-                )
-                return
+            if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+                if (
+                    is_cancellation_within_hold_duration(
+                        refund_data.payment_authorized_at,
+                        client_cancel_at,
+                        getattr(refund_data, "performer_connected_at", None),
+                    )
+                    and op_id is not None
+                ):
+                    await reverse_paymented_deal(op_id)
+                    await set_reversed_order_status(
+                        session,
+                        order_id,
+                        refund_data.current_status,
+                        performer_id,
+                    )
+                    return
+                if op_id is not None:
+                    await complete_paymented_deal(op_id)
+                    await session.execute(
+                        update(OrderPaymentData)
+                        .where(OrderPaymentData.order_id == order_id)
+                        .values(
+                            payment_status=OrderPaymentStates.COMPLETED.value,
+                            payment_complete_at=func.now(),
+                            updated_at=func.now(),
+                        )
+                    )
 
             refund_result = await refund_money(
                 RefundMoneyPaymentRequest(
@@ -622,10 +633,9 @@ async def performer_conflict_order(order_id: int, performer_id: int) -> None:
                 if isinstance(payment_status, OrderPaymentStates)
                 else payment_status
             )
-            if (
-                payment_status_val == OrderPaymentStates.AUTHORIZED.value
-                and payment_operation_id is not None
-            ):
+            if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
+                if payment_operation_id is None:
+                    raise OrderNotFoundError()
                 await complete_paymented_deal(int(payment_operation_id))
                 await session.execute(
                     update(OrderPaymentData)

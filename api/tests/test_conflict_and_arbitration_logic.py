@@ -145,17 +145,22 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             await admins_methods.close_order_to_performer(1, 99, "   ")
 
-    @patch("api.utils.admins_methods.reverse_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.admins_methods.complete_paymented_deal", new_callable=AsyncMock)
     @patch("api.utils.admins_methods.refund_money", new_callable=AsyncMock)
     @patch("api.utils.admins_methods.add_order_status_history", new_callable=AsyncMock)
     @patch("api.utils.admins_methods.AsyncSessionLocal")
-    async def test_close_order_to_client_authorized_performs_reversal(
+    async def test_close_order_to_client_authorized_completes_payment_and_refunds(
         self,
         mock_session_local,
         mock_history,
         mock_refund,
-        mock_reverse,
+        mock_complete,
     ):
+        mock_refund.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="refund_op_77",
+            )
+        )
         fake_row = (
             OrderStates.OPEN_CONFLICT.value,  # status
             10,  # client_id
@@ -168,14 +173,14 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
             "+79991234567",  # phone_number
             "12345",  # paygine_payment_operation_id
         )
-        fake_session = FakeSession(execute_results=[FakeResult(fake_row), None, None])
+        fake_session = FakeSession(execute_results=[FakeResult(fake_row), None, None, None])
         mock_session_local.return_value = fake_session
 
         await admins_methods.close_order_to_client(1, 99, "Performer failed to deliver")
 
-        # Must call reverse_paymented_deal, NOT refund_money
-        mock_reverse.assert_awaited_once_with(12345)
-        mock_refund.assert_not_called()
+        # Must capture authorized payment before issuing refund (service fee retained in kubyshka)
+        mock_complete.assert_awaited_once_with(12345)
+        mock_refund.assert_awaited_once()
         mock_history.assert_awaited_once_with(
             fake_session,
             1,
@@ -186,7 +191,7 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
             changed_by_admin_id=99,
         )
 
-    @patch("api.utils.admins_methods.reverse_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.admins_methods.complete_paymented_deal", new_callable=AsyncMock)
     @patch("api.utils.admins_methods.refund_money", new_callable=AsyncMock)
     @patch("api.utils.admins_methods.add_order_status_history", new_callable=AsyncMock)
     @patch("api.utils.admins_methods.AsyncSessionLocal")
@@ -195,7 +200,7 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
         mock_session_local,
         mock_history,
         mock_refund,
-        mock_reverse,
+        mock_complete,
     ):
         mock_refund.return_value = SimpleNamespace(
             payment_values=SimpleNamespace(
@@ -219,8 +224,8 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
 
         await admins_methods.close_order_to_client(1, 99, "Work was incomplete")
 
-        # Must call refund_money, NOT reverse
-        mock_reverse.assert_not_called()
+        # Already completed, must not call complete_paymented_deal again
+        mock_complete.assert_not_called()
         mock_refund.assert_awaited_once()
         mock_history.assert_awaited_once_with(
             fake_session,
@@ -603,4 +608,90 @@ class AddOrderStatusHistoryAdminTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(params["changed_by_user_id"])
         self.assertEqual(params["changed_by_admin_id"], 99)
         self.assertEqual(params["comment"], "Resolved by arbiter")
+
+
+class PerformerConflictOrderTest(unittest.IsolatedAsyncioTestCase):
+    @patch("api.utils.orders_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.add_order_status_history", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.ensure_user_exists", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_performer_conflict_authorized_completes_payment(
+        self,
+        mock_session_local,
+        mock_ensure_user,
+        mock_history,
+        mock_complete,
+    ):
+        from api.utils import orders_methods
+
+        fake_row = (
+            OrderStates.AWAITING_CONFLICT.value,  # current_status
+            10,  # client_id
+            OrderPaymentStates.AUTHORIZED.value,  # payment_status
+            "98765",  # payment_operation_id
+        )
+        fake_session = FakeSession(execute_results=[FakeResult(fake_row), None, None])
+        mock_session_local.return_value = fake_session
+
+        await orders_methods.performer_conflict_order(1, 20)
+
+        mock_ensure_user.assert_awaited_once_with(fake_session, 20)
+        mock_complete.assert_awaited_once_with(98765)
+        mock_history.assert_awaited_once_with(
+            fake_session,
+            1,
+            OrderStates.AWAITING_CONFLICT.value,
+            OrderStates.OPEN_CONFLICT.value,
+            20,
+        )
+
+    @patch("api.utils.orders_methods.complete_paymented_deal", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.add_order_status_history", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.ensure_user_exists", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_performer_conflict_completed_does_not_call_complete_again(
+        self,
+        mock_session_local,
+        mock_ensure_user,
+        mock_history,
+        mock_complete,
+    ):
+        from api.utils import orders_methods
+
+        fake_row = (
+            OrderStates.AWAITING_CONFLICT.value,  # current_status
+            10,  # client_id
+            OrderPaymentStates.COMPLETED.value,  # payment_status
+            "98765",  # payment_operation_id
+        )
+        fake_session = FakeSession(execute_results=[FakeResult(fake_row), None])
+        mock_session_local.return_value = fake_session
+
+        await orders_methods.performer_conflict_order(1, 20)
+
+        mock_complete.assert_not_called()
+        mock_history.assert_awaited_once()
+
+    @patch("api.utils.orders_methods.ensure_user_exists", new_callable=AsyncMock)
+    @patch("api.utils.orders_methods.AsyncSessionLocal")
+    async def test_performer_conflict_authorized_missing_op_id_raises(
+        self,
+        mock_session_local,
+        mock_ensure_user,
+    ):
+        from api.exceptions import OrderNotFoundError
+        from api.utils import orders_methods
+
+        fake_row = (
+            OrderStates.AWAITING_CONFLICT.value,
+            10,
+            OrderPaymentStates.AUTHORIZED.value,
+            None,
+        )
+        fake_session = FakeSession(execute_results=[FakeResult(fake_row)])
+        mock_session_local.return_value = fake_session
+
+        with self.assertRaises(OrderNotFoundError):
+            await orders_methods.performer_conflict_order(1, 20)
+
 

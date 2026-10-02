@@ -19,7 +19,6 @@ from api.payments.payments_methods import (
     complete_paymented_deal,
     refund_money,
     register_payout_deal,
-    reverse_paymented_deal,
 )
 from api.schemas.schemas_v1 import (
     AdminOrderInfoResponse,
@@ -368,35 +367,16 @@ async def close_order_to_client(order_id: int, admin_id: int, reason: str) -> No
             if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
                 if payment_operation_id is None:
                     raise OrderNotFoundError()
-                await reverse_paymented_deal(int(payment_operation_id))
-                await session.execute(
-                    update(Order)
-                    .where(Order.id == order_id)
-                    .values(
-                        arbitration_reason=reason,
-                        **order_status_values(OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value),
-                    )
-                )
-                await add_order_status_history(
-                    session,
-                    order_id,
-                    current_status,
-                    OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-                    None,
-                    comment=reason,
-                    changed_by_admin_id=admin_id,
-                )
+                await complete_paymented_deal(int(payment_operation_id))
                 await session.execute(
                     update(OrderPaymentData)
                     .where(OrderPaymentData.order_id == order_id)
                     .values(
-                        payment_status=OrderPaymentStates.CANCELED.value,
-                        revoke_status=OrderPaymentStates.COMPLETED.value,
-                        revoked_at=func.now(),
+                        payment_status=OrderPaymentStates.COMPLETED.value,
+                        payment_complete_at=func.now(),
                         updated_at=func.now(),
                     )
                 )
-                return
 
             refund_result = await refund_money(
                 RefundMoneyPaymentRequest(

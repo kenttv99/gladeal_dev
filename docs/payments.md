@@ -145,12 +145,11 @@
 - `complete_paymented_deal` вызывает `POST /webapi/sd/SDComplete` для окончательного списания холда.
   - Точка отсчета 5 минут холда (`PAYMENT_HOLD_DURATION_MINUTES`) определяется как `max(payment_authorized_at, performer_connected_at)` — отсчет начинается только после подключения исполнителя к задаче (`performer_connected_at IS NOT NULL`).
   - Запускается автоматически через фоновый воркер `process_authorized_payments` по истечении 5 минут после подключения исполнителя.
-  - При открытии спора исполнителем (`performer_conflict_order` -> `open_conflict`) `complete_paymented_deal` вызывается незамедлительно, гарантируя, что средства списаны и готовы к арбитражному распределению.
+  - При открытии спора исполнителем (`performer_conflict_order` -> `open_conflict`) `complete_paymented_deal` вызывается незамедлительно: средства переводятся в кубышку, комиссия сервиса автоматически удерживается, а статус платежа переходит в `COMPLETED`.
 - `reverse_paymented_deal` вызывает `POST /webapi/sd/SDReverse` для разморозки заблокированных средств без списания комиссии:
   - Применяется при подтверждении отказа исполнителем (`performer_decline_order`), если отказ заказчика инициирован в пределах 5 минут с момента подключения исполнителя.
   - Применяется при автоотмене воркером по истечении 3 рабочих дней молчания в `awaiting_conflict`, если платеж еще в `AUTHORIZED`.
-  - Применяется арбитром при закрытии спора в пользу заказчика (`close_order_to_client`), если операция осталась в `AUTHORIZED`.
-- `refund_money` регистрирует payout-операцию возврата через `POST /webapi/Register` с `client_ref` заказчика и суммой заказа без сервисной комиссии (применяется, если отмена или возврат арбитра произошли после перехода платежа в `COMPLETED`).
+- `refund_money` регистрирует payout-операцию возврата через `POST /webapi/Register` с `client_ref` заказчика и суммой заказа без сервисной комиссии. Применяется при решении арбитра в пользу заказчика (`close_order_to_client`) — если платеж еще находился в `AUTHORIZED`, он предварительно переводится в кубышку через `complete_paymented_deal`, после чего заказчику выплачивается сумма заказа, а сервисная комиссия остается удержанной платформой.
 - `cancle_unpayment_deal` вызывает `POST /webapi/ChangeOrderStatus` с `order_state=EXPIRED`.
 
 Все эти методы используют общий `httpx.AsyncClient` и парсят ответ через `parse_paygine_response`.
