@@ -21,7 +21,10 @@ from api.utils.help_orders_method import (
 )
 from api.utils.order_status_webhook_methods import (
     WebhookOrderOperation,
+    get_webhook_payout_completed_order_status,
+    get_webhook_refund_completed_order_status,
     read_order_status_webhook_payload,
+    set_webhook_payout_completed,
     set_webhook_refund_completed,
 )
 
@@ -609,6 +612,118 @@ class OrderStatusSetterTest(unittest.IsolatedAsyncioTestCase):
         await set_webhook_refund_completed(session, operation)
 
         self.assertEqual(session.statements, [])
+
+    async def test_refund_webhook_preserves_closed_by_arbiter_to_client(self):
+        session = FakeSession()
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payout_status=None,
+            revoke_status=OrderPaymentStates.REGISTERED.value,
+            payment_operation_id=100,
+            operation_type="refund",
+        )
+
+        await set_webhook_refund_completed(session, operation)
+
+        self.assertEqual(len(session.statements), 1)
+        self.assertEqual(
+            compiled_params(session.statements[0])["revoke_status"],
+            OrderPaymentStates.COMPLETED.value,
+        )
+
+    async def test_refund_webhook_preserves_cancled_by_expire_time(self):
+        session = FakeSession()
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.CANCLED_BY_EXPIRE_TIME.value,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payout_status=None,
+            revoke_status=OrderPaymentStates.REGISTERED.value,
+            payment_operation_id=100,
+            operation_type="refund",
+        )
+
+        await set_webhook_refund_completed(session, operation)
+
+        self.assertEqual(len(session.statements), 1)
+        self.assertEqual(
+            compiled_params(session.statements[0])["revoke_status"],
+            OrderPaymentStates.COMPLETED.value,
+        )
+
+    async def test_payout_webhook_completes_awaiting_performer_payout(self):
+        session = FakeSession()
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payout_status=OrderPaymentStates.REGISTERED.value,
+            revoke_status=None,
+            payment_operation_id=100,
+            operation_type="payout",
+        )
+
+        await set_webhook_payout_completed(session, operation)
+
+        self.assertEqual(
+            compiled_params(session.statements[0])["status"],
+            OrderStates.SUCCESSFUL_COMPLETION.value,
+        )
+        self.assertEqual(
+            compiled_params(session.statements[1])["new_status"],
+            OrderStates.SUCCESSFUL_COMPLETION.value,
+        )
+        self.assertEqual(
+            compiled_params(session.statements[2])["payout_status"],
+            OrderPaymentStates.COMPLETED.value,
+        )
+
+    async def test_payout_webhook_preserves_closed_by_arbiter_to_performer(self):
+        session = FakeSession()
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payout_status=OrderPaymentStates.REGISTERED.value,
+            revoke_status=None,
+            payment_operation_id=100,
+            operation_type="payout",
+        )
+
+        await set_webhook_payout_completed(session, operation)
+
+        self.assertEqual(len(session.statements), 1)
+        self.assertEqual(
+            compiled_params(session.statements[0])["payout_status"],
+            OrderPaymentStates.COMPLETED.value,
+        )
+
+    async def test_payout_webhook_preserves_confirm_by_expire_time_to_performer(self):
+        session = FakeSession()
+        operation = WebhookOrderOperation(
+            order_id=1,
+            payment_data_id=10,
+            order_status=OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
+            payment_status=OrderPaymentStates.COMPLETED.value,
+            payout_status=OrderPaymentStates.REGISTERED.value,
+            revoke_status=None,
+            payment_operation_id=100,
+            operation_type="payout",
+        )
+
+        await set_webhook_payout_completed(session, operation)
+
+        self.assertEqual(len(session.statements), 1)
+        self.assertEqual(
+            compiled_params(session.statements[0])["payout_status"],
+            OrderPaymentStates.COMPLETED.value,
+        )
 
 
 class GetOrderPaymentOperationIdGuardTest(unittest.IsolatedAsyncioTestCase):

@@ -263,14 +263,14 @@ async def set_webhook_payout_completed(
             .where(Order.id == operation.order_id)
             .values(**order_status_values(new_status))
         )
-    if is_new_payout_completion:
-        await add_order_status_history(
-            session,
-            operation.order_id,
-            current_status,
-            new_status,
-            None,
-        )
+        if is_new_payout_completion:
+            await add_order_status_history(
+                session,
+                operation.order_id,
+                current_status,
+                new_status,
+                None,
+            )
 
     await session.execute(
         update(OrderPaymentData)
@@ -299,14 +299,14 @@ async def set_webhook_refund_completed(
             .where(Order.id == operation.order_id)
             .values(**order_status_values(new_status))
         )
-    if is_new_refund_completion:
-        await add_order_status_history(
-            session,
-            operation.order_id,
-            current_status,
-            new_status,
-            None,
-        )
+        if is_new_refund_completion:
+            await add_order_status_history(
+                session,
+                operation.order_id,
+                current_status,
+                new_status,
+                None,
+            )
 
     if is_new_refund_completion:
         await session.execute(
@@ -325,8 +325,8 @@ def get_webhook_payout_completed_order_status(
 ) -> str:
     status = order_status_value(current_status)
     if status in {
-        OrderStates.CANCLED_BY_EXPIRE_TIME.value,
         OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER.value,
+        OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
     }:
         return status
     return OrderStates.SUCCESSFUL_COMPLETION.value
@@ -336,7 +336,10 @@ def get_webhook_refund_completed_order_status(
     current_status: OrderStates | str | None,
 ) -> str:
     status = order_status_value(current_status)
-    if status == OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value:
+    if status in {
+        OrderStates.CANCLED_BY_EXPIRE_TIME.value,
+        OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
+    }:
         return status
     return OrderStates.UNSUCCESSFUL_COMPLETION.value
 
