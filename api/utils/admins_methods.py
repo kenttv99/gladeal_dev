@@ -303,6 +303,7 @@ async def get_order_info(order_id: int) -> AdminOrderInfoResponse:
                 old_status=history.old_status,
                 new_status=history.new_status,
                 changed_by_user_id=history.changed_by_user_id,
+                changed_by_admin_id=history.changed_by_admin_id,
                 comment=history.comment,
                 created_at=history.created_at,
             )
@@ -381,8 +382,9 @@ async def close_order_to_client(order_id: int, admin_id: int, reason: str) -> No
                     order_id,
                     current_status,
                     OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-                    admin_id,
+                    None,
                     comment=reason,
+                    changed_by_admin_id=admin_id,
                 )
                 await session.execute(
                     update(OrderPaymentData)
@@ -419,8 +421,9 @@ async def close_order_to_client(order_id: int, admin_id: int, reason: str) -> No
                 order_id,
                 current_status,
                 OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-                admin_id,
+                None,
                 comment=reason,
+                changed_by_admin_id=admin_id,
             )
             await session.execute(
                 update(OrderPaymentData)
@@ -527,8 +530,9 @@ async def close_order_to_performer(order_id: int, admin_id: int, reason: str) ->
                 order_id,
                 current_status,
                 OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
-                admin_id,
+                None,
                 comment=reason,
+                changed_by_admin_id=admin_id,
             )
             await session.execute(
                 update(OrderPaymentData)

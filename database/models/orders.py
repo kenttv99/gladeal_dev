@@ -13,7 +13,7 @@ from .base import Base, enum_column
 
 if TYPE_CHECKING:
     from .payments import OrderPaymentData
-    from .users import User
+    from .users import Admin, User
 
 
 class Order(Base):
@@ -146,6 +146,7 @@ class OrderStatusHistory(Base):
     __table_args__ = (
         Index("ix_order_status_history_order_id", "order_id"),
         Index("ix_order_status_history_created_at", "created_at"),
+        Index("ix_order_status_history_changed_by_admin_id", "changed_by_admin_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -159,6 +160,7 @@ class OrderStatusHistory(Base):
         nullable=False,
     )
     changed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    changed_by_admin_id: Mapped[int | None] = mapped_column(ForeignKey("admins.id"), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -168,3 +170,4 @@ class OrderStatusHistory(Base):
 
     order: Mapped["Order"] = relationship("Order", back_populates="status_history")
     changed_by_user: Mapped["User | None"] = relationship("User")
+    changed_by_admin: Mapped["Admin | None"] = relationship("Admin")

@@ -217,12 +217,16 @@ Refresh token-ы администраторов.
 - `old_status`
 - `new_status`
 - `changed_by_user_id`
+- `changed_by_admin_id`
+- `comment`
 - `created_at`
 
 Особенности:
 
 - `order_id -> orders.id`.
-- `changed_by_user_id -> users.id`.
+- `changed_by_user_id -> users.id` (nullable, заполняется при действиях пользователей).
+- `changed_by_admin_id -> admins.id` (nullable, заполняется при решениях арбитра/администратора).
+- `comment` - текстовая причина/комментарий изменения статуса (например, причина арбитража или отмены воркером).
 - таблица хранит основные переходы статусов, которые выполняются через API, воркер и payment webhook, включая payout-completed callback.
 
 ### `notifications`
@@ -289,6 +293,7 @@ KYC-данные и статус верификации пользователя
 - `orders_payment_data.order_id -> orders.id`
 - `order_status_history.order_id -> orders.id`
 - `order_status_history.changed_by_user_id -> users.id`
+- `order_status_history.changed_by_admin_id -> admins.id`
 - `kyc_data.user_id -> users.id`
 - `notifications.user_id -> users.id`
 - `user_refresh_tokens.user_id -> users.id`

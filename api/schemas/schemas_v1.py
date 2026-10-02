@@ -176,6 +176,7 @@ class AdminOrderStatusHistoryResponse(BaseModel):
     old_status: OrderStates | None
     new_status: OrderStates
     changed_by_user_id: int | None
+    changed_by_admin_id: int | None = None
     comment: str | None = None
     created_at: datetime
 

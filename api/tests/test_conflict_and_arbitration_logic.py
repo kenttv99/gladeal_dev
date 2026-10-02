@@ -9,7 +9,10 @@ from api.config import EXPIRE_TIME_TO_COMNFIRM_MINUTES
 from api.enums.enums_v1 import OrderPaymentStates, OrderStates
 from api.exceptions import ValidationError
 from api.utils import admins_methods
-from api.utils.help_orders_method import is_cancellation_within_hold_duration
+from api.utils.help_orders_method import (
+    add_order_status_history,
+    is_cancellation_within_hold_duration,
+)
 from workers.utils import order_expire_methods
 from workers.utils.order_expire_methods import (
     EXPIRED_ORDER_ACTIONS,
@@ -175,8 +178,9 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
             1,
             OrderStates.OPEN_CONFLICT.value,
             OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-            99,
+            None,
             comment="Performer failed to deliver",
+            changed_by_admin_id=99,
         )
 
     @patch("api.utils.admins_methods.reverse_paymented_deal", new_callable=AsyncMock)
@@ -220,8 +224,9 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
             1,
             OrderStates.OPEN_CONFLICT.value,
             OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
-            99,
+            None,
             comment="Work was incomplete",
+            changed_by_admin_id=99,
         )
 
     @patch("api.utils.admins_methods.complete_paymented_deal", new_callable=AsyncMock)
@@ -266,8 +271,9 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
             1,
             OrderStates.OPEN_CONFLICT.value,
             OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
-            99,
+            None,
             comment="Work delivered fully per spec",
+            changed_by_admin_id=99,
         )
 
     @patch("api.utils.admins_methods.complete_paymented_deal", new_callable=AsyncMock)
@@ -312,8 +318,9 @@ class AdminArbitrationDisputeTest(unittest.IsolatedAsyncioTestCase):
             1,
             OrderStates.OPEN_CONFLICT.value,
             OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
-            99,
+            None,
             comment="Work delivered fully per spec",
+            changed_by_admin_id=99,
         )
 
 
@@ -405,3 +412,27 @@ class WorkerConflictCancelExpirationTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["confirm"], [20])
         self.assertEqual(result["conflict_cancel"], [30, 31, 32])
         self.assertEqual(len(fake_session.statements), 3)
+
+
+class AddOrderStatusHistoryAdminTest(unittest.IsolatedAsyncioTestCase):
+    async def test_add_order_status_history_with_admin_id(self):
+        fake_session = FakeSession()
+        await add_order_status_history(
+            session=fake_session,
+            order_id=1,
+            old_status=OrderStates.OPEN_CONFLICT,
+            new_status=OrderStates.CLOSED_BY_ARBITER_TO_CLIENT.value,
+            changed_by_user_id=None,
+            comment="Resolved by arbiter",
+            changed_by_admin_id=99,
+        )
+        self.assertEqual(len(fake_session.statements), 1)
+        insert_stmt = fake_session.statements[0]
+        params = insert_stmt.compile().params
+        self.assertEqual(params["order_id"], 1)
+        self.assertEqual(params["old_status"], "open_conflict")
+        self.assertEqual(params["new_status"], "closed_by_arbiter_to_client")
+        self.assertIsNone(params["changed_by_user_id"])
+        self.assertEqual(params["changed_by_admin_id"], 99)
+        self.assertEqual(params["comment"], "Resolved by arbiter")
+

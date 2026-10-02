@@ -552,6 +552,8 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `old_status`
 - `new_status`
 - `changed_by_user_id`
+- `changed_by_admin_id`
+- `comment`
 
 Enum-значения сохраняются в БД через `.value`, в нижнем регистре.
 

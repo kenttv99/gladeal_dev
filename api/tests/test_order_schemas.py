@@ -122,10 +122,25 @@ class OrderSchemasTest(unittest.TestCase):
             created_at=now,
             updated_at=now,
             completed_at=now,
-            status_history=[],
+            status_history=[
+                AdminOrderStatusHistoryResponse(
+                    id=1,
+                    order_id=10,
+                    old_status=OrderStates.OPEN_CONFLICT,
+                    new_status=OrderStates.CLOSED_BY_ARBITER_TO_CLIENT,
+                    changed_by_user_id=None,
+                    changed_by_admin_id=99,
+                    comment="Resolved by arbiter",
+                    created_at=now,
+                )
+            ],
         )
         self.assertEqual(admin_res.order_type, "free_deal")
         self.assertEqual(admin_res.task_free_deal, "Write code")
+        self.assertEqual(len(admin_res.status_history), 1)
+        self.assertIsNone(admin_res.status_history[0].changed_by_user_id)
+        self.assertEqual(admin_res.status_history[0].changed_by_admin_id, 99)
+        self.assertEqual(admin_res.status_history[0].new_status, "closed_by_arbiter_to_client")
 
     def test_register_user_request_schema(self):
         now = datetime.now(timezone.utc)

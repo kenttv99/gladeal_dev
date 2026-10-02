@@ -165,8 +165,9 @@ async def add_order_status_history(
     order_id: int,
     old_status: OrderStates | str | None,
     new_status: str,
-    changed_by_user_id: int | None,
+    changed_by_user_id: int | None = None,
     comment: str | None = None,
+    changed_by_admin_id: int | None = None,
 ) -> None:
     await session.execute(
         insert(OrderStatusHistory).values(
@@ -174,6 +175,7 @@ async def add_order_status_history(
             old_status=order_status_value(old_status),
             new_status=new_status,
             changed_by_user_id=changed_by_user_id,
+            changed_by_admin_id=changed_by_admin_id,
             comment=comment,
         )
     )
