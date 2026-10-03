@@ -275,13 +275,12 @@ async def verify_verification_code(
     }
 
 
-kyc_router = APIRouter()
-
-
 @router.post("/kyc/verify", response_model=UserKYCResponse)
-@kyc_router.post("/kyc/verify", response_model=UserKYCResponse)
 async def kyc_verify(
-    data: UserKYCVerifyRequest = Body(default=None),
+    data: UserKYCVerifyRequest = Body(
+        default=None,
+        description="Данные для KYC идентификации (ФИО, дата рождения, серия и номер паспорта)",
+    ),
     authorized_user_id: int = Depends(authorize_user),
 ) -> UserKYCResponse:
     """Запускает процесс KYC идентификации пользователя через Paygine."""
@@ -289,7 +288,6 @@ async def kyc_verify(
 
 
 @router.get("/kyc/status", response_model=UserKYCResponse)
-@kyc_router.get("/kyc/status", response_model=UserKYCResponse)
 async def kyc_status(
     authorized_user_id: int = Depends(authorize_user),
 ) -> UserKYCResponse:

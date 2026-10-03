@@ -103,11 +103,11 @@ class TwoFactorStatusResponse(BaseModel):
 
 
 class UserKYCVerifyRequest(BaseModel):
-    first_name: str | None = None
-    patronymic: str | None = None
-    last_name: str | None = None
-    birth_date: datetime | None = None
-    persondoc_number: str | None = None
+    first_name: str | None = Field(default=None, description="Имя пользователя", examples=["Иван"])
+    patronymic: str | None = Field(default=None, description="Отчество пользователя", examples=["Иванович"])
+    last_name: str | None = Field(default=None, description="Фамилия пользователя", examples=["Иванов"])
+    birth_date: datetime | None = Field(default=None, description="Дата рождения (ISO 8601)", examples=["2000-01-15T00:00:00Z"])
+    persondoc_number: str | None = Field(default=None, description="Серия и номер паспорта (например, 1234 567890)", examples=["1234 567890"])
 
 
 class UserKYCResponse(BaseModel):
