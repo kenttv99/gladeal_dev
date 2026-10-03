@@ -22,11 +22,11 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    first_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    patronymic: Mapped[str] = mapped_column(String(128), nullable=False)
-    last_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    first_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    patronymic: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     phone_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
-    birth_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    birth_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     persondoc_number: Mapped[str | None] = mapped_column(String(32), unique=True, nullable=True)
     two_factor_secret: Mapped[str | None] = mapped_column(String(32), nullable=True)
     is_two_factor_enabled: Mapped[bool] = mapped_column(

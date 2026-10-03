@@ -12,6 +12,7 @@ from api.schemas.schemas_v1 import (
     CreateOrderRequest,
     OrderInfoResponse,
     RegisterUserRequest,
+    UserKYCVerifyRequest,
 )
 from api.utils.help_orders_method import ensure_order_price_and_user_verified
 from database.models.orders import Order
@@ -159,6 +160,33 @@ class OrderSchemasTest(unittest.TestCase):
         self.assertEqual(req.birth_date, now)
         self.assertEqual(req.persondoc_number, "1234567890")
         self.assertTrue(req.ppd)
+
+    def test_register_user_request_schema_phone_only(self):
+        data = {
+            "phone_number": "+79991234567",
+        }
+        req = RegisterUserRequest.model_validate(data)
+        self.assertEqual(req.phone_number, "+79991234567")
+        self.assertIsNone(req.first_name)
+        self.assertIsNone(req.patronymic)
+        self.assertIsNone(req.last_name)
+        self.assertIsNone(req.birth_date)
+        self.assertIsNone(req.persondoc_number)
+        self.assertFalse(req.ppd)
+
+    def test_user_kyc_verify_request_schema(self):
+        now = datetime.now(timezone.utc)
+        data = {
+            "first_name": "Петр",
+            "patronymic": "Петрович",
+            "last_name": "Петров",
+            "birth_date": now,
+            "persondoc_number": "4500 123456",
+        }
+        req = UserKYCVerifyRequest.model_validate(data)
+        self.assertEqual(req.first_name, "Петр")
+        self.assertEqual(req.persondoc_number, "4500 123456")
+
 
 
 class OrderVerificationPriceLimitTest(unittest.IsolatedAsyncioTestCase):

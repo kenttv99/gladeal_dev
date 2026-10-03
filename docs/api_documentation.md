@@ -219,15 +219,15 @@ Redis-ключи разделены по сценарию:
 
 Регистрация сохраняет:
 
-- `first_name`
-- `patronymic`
-- `last_name`
-- `phone_number`
-- `birth_date`
+- `phone_number` (обязательно)
+- `first_name` (опционально)
+- `patronymic` (опционально)
+- `last_name` (опционально)
+- `birth_date` (опционально)
 - `persondoc_number` (опционально)
 - `ppd`
 
-`POST /api/v1/auth/register` принимает:
+`POST /api/v1/auth/register` принимает `RegisterUserRequest` (для сделок до 15 000 ₽ достаточно передать только `phone_number`):
 
 ```json
 {
@@ -391,11 +391,21 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 
 ## KYC endpoints (Идентификация пользователя)
 
-- `POST /api/v1/users/kyc/verify` (также доступен по пути `/api/v1/auth/kyc/verify`) - запускает идентификацию пользователя в Paygine по его паспортным данным (`persondoc_number`, `birth_date`, `first_name`, `last_name`, `patronymic`).
+- `POST /api/v1/users/kyc/verify` (также доступен по пути `/api/v1/auth/kyc/verify`) - запускает идентификацию пользователя в Paygine по его паспортным данным (`persondoc_number`, `birth_date`, `first_name`, `last_name`, `patronymic`). Принимает опциональное тело `UserKYCVerifyRequest` для дозаполнения или обновления персональных данных перед проверкой.
 - `GET /api/v1/users/kyc/status` (также доступен по пути `/api/v1/auth/kyc/status`) - возвращает сохраненный статус верификации пользователя.
 
 Оба эндпоинта требуют авторизации (`Bearer access_token`).
-Если у пользователя не заполнены ФИО (`first_name`, `patronymic`, `last_name`), дата рождения (`birth_date`) или серия и номер паспорта (`persondoc_number`), возвращается ошибка `USER_PERSONDOC_REQUIRED` (HTTP 400).
+Тело `POST /api/v1/users/kyc/verify` (`UserKYCVerifyRequest`):
+```json
+{
+  "first_name": "Иван",
+  "patronymic": "Иванович",
+  "last_name": "Иванов",
+  "birth_date": "2000-01-15T00:00:00Z",
+  "persondoc_number": "1234 567890"
+}
+```
+Если у пользователя в БД и в теле запроса не заполнены ФИО (`first_name`, `patronymic`, `last_name`), дата рождения (`birth_date`) или серия и номер паспорта (`persondoc_number`), возвращается ошибка `USER_PERSONDOC_REQUIRED` (HTTP 400).
 
 Ответ `UserKYCResponse`:
 ```json

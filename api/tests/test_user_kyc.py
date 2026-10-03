@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from api.exceptions import UserNotFoundError, UserPersondocRequiredError
-from api.schemas.schemas_v1 import UserKYCResponse
+from api.schemas.schemas_v1 import UserKYCResponse, UserKYCVerifyRequest
 from api.utils.users_methods import get_user_kyc_data, verify_user_kyc
 from database.models.users import KYCData, User
 
@@ -186,6 +186,55 @@ class UserKYCTest(unittest.IsolatedAsyncioTestCase):
             res = await get_user_kyc_data(user_id=1)
 
         self.assertEqual(res.user_id, 1)
+        self.assertTrue(res.kyc_status)
+        self.assertEqual(res.kyc_level, "40")
+
+    async def test_verify_user_kyc_with_request_data_populates_user(self):
+        user = User(
+            id=1,
+            first_name=None,
+            patronymic=None,
+            last_name=None,
+            birth_date=None,
+            persondoc_number=None,
+        )
+        fake_session = FakeSession(user=user, kyc_entry=None)
+        mock_kyc_response = {
+            "root_tag": "response",
+            "data": {
+                "status": "APPROVED",
+                "persondoc_result": "300",
+                "identification_level": "40",
+            },
+        }
+        req_data = UserKYCVerifyRequest(
+            first_name="Сергей",
+            patronymic="Сергеевич",
+            last_name="Сергеев",
+            birth_date=datetime(1995, 5, 20, tzinfo=timezone.utc),
+            persondoc_number="5000 654321",
+        )
+
+        with (
+            patch("api.utils.users_methods.AsyncSessionLocal", return_value=fake_session),
+            patch(
+                "api.utils.users_methods.check_identification_status",
+                new=AsyncMock(return_value=mock_kyc_response),
+            ) as mock_check,
+        ):
+            res = await verify_user_kyc(user_id=1, data=req_data)
+
+        self.assertEqual(user.first_name, "Сергей")
+        self.assertEqual(user.patronymic, "Сергеевич")
+        self.assertEqual(user.last_name, "Сергеев")
+        self.assertEqual(user.persondoc_number, "5000 654321")
+        mock_check.assert_awaited_once_with(
+            first_name="Сергей",
+            patronymic="Сергеевич",
+            last_name="Сергеев",
+            birth_date="1995.05.20",
+            persondoc_number="5000 654321",
+        )
         self.assertTrue(res.kyc_status)
         self.assertEqual(res.kyc_level, "40")
 

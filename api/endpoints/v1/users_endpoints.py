@@ -16,6 +16,7 @@ from api.schemas.schemas_v1 import (
     TwoFactorStatusResponse,
     TwoFactorVerifyRequest,
     UserKYCResponse,
+    UserKYCVerifyRequest,
 )
 from api.sms_calls.sms_calls_methods import (
     consume_phone_sms_call_verification,
@@ -280,10 +281,11 @@ kyc_router = APIRouter()
 @router.post("/kyc/verify", response_model=UserKYCResponse)
 @kyc_router.post("/kyc/verify", response_model=UserKYCResponse)
 async def kyc_verify(
+    data: UserKYCVerifyRequest = Body(default=None),
     authorized_user_id: int = Depends(authorize_user),
 ) -> UserKYCResponse:
     """Запускает процесс KYC идентификации пользователя через Paygine."""
-    return await verify_user_kyc(authorized_user_id)
+    return await verify_user_kyc(authorized_user_id, data)
 
 
 @router.get("/kyc/status", response_model=UserKYCResponse)

@@ -17,11 +17,11 @@ from api.enums.enums_v1 import (
 ###
 
 class RegisterUserRequest(BaseModel):
-    first_name: str
-    patronymic: str
-    last_name: str
     phone_number: str
-    birth_date: datetime
+    first_name: str | None = None
+    patronymic: str | None = None
+    last_name: str | None = None
+    birth_date: datetime | None = None
     persondoc_number: str | None = None
     ppd: bool = False
 
@@ -102,6 +102,14 @@ class TwoFactorStatusResponse(BaseModel):
     backup_codes_remaining: int
 
 
+class UserKYCVerifyRequest(BaseModel):
+    first_name: str | None = None
+    patronymic: str | None = None
+    last_name: str | None = None
+    birth_date: datetime | None = None
+    persondoc_number: str | None = None
+
+
 class UserKYCResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
@@ -119,8 +127,8 @@ class AdminUserResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 
     id: int
-    first_name: str
-    last_name: str
+    first_name: str | None = None
+    last_name: str | None = None
     phone_number: str
     ppd: bool
     is_banned: bool

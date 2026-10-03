@@ -20,6 +20,7 @@ from api.schemas.schemas_v1 import (
     TwoFactorSetupResponse,
     TwoFactorStatusResponse,
     UserKYCResponse,
+    UserKYCVerifyRequest,
 )
 from api.utils.jwt_methods import (
     create_refresh_token,
@@ -47,11 +48,11 @@ ACCOUNT_DELETION_BLOCKING_STATUSES = ACTIVE_ORDER_STATUSES
 
 
 async def register_user(
-    first_name: str,
-    patronymic: str,
-    last_name: str,
-    phone_number: str,
-    birth_date: datetime,
+    first_name: str | None = None,
+    patronymic: str | None = None,
+    last_name: str | None = None,
+    phone_number: str = "",
+    birth_date: datetime | None = None,
     persondoc_number: str | None = None,
     ppd: bool = False,
 ) -> User:
@@ -179,13 +180,29 @@ async def reset_phone_number(user_id: int, phone_number: str) -> None:
             raise
 
 
-async def verify_user_kyc(user_id: int) -> UserKYCResponse:
+async def verify_user_kyc(
+    user_id: int,
+    data: UserKYCVerifyRequest | None = None,
+) -> UserKYCResponse:
     """Выполняет идентификацию пользователя через Paygine и сохраняет результат в KYCData."""
     async with AsyncSessionLocal() as session:
         async with session.begin():
             user = await session.scalar(select(User).where(User.id == user_id))
             if user is None:
                 raise UserNotFoundError()
+
+            if data is not None:
+                if data.first_name is not None and data.first_name.strip():
+                    user.first_name = data.first_name.strip()
+                if data.patronymic is not None and data.patronymic.strip():
+                    user.patronymic = data.patronymic.strip()
+                if data.last_name is not None and data.last_name.strip():
+                    user.last_name = data.last_name.strip()
+                if data.birth_date is not None:
+                    user.birth_date = data.birth_date
+                if data.persondoc_number is not None and data.persondoc_number.strip():
+                    user.persondoc_number = data.persondoc_number.strip()
+
             if (
                 not user.first_name
                 or not user.patronymic

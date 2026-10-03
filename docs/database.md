@@ -50,7 +50,7 @@
 
 - `phone_number` уникален.
 - `persondoc_number` уникален, используется для прохождения KYC.
-- `patronymic` и `birth_date` обязательны при регистрации.
+- `first_name`, `patronymic`, `last_name`, `birth_date` и `persondoc_number` опциональны при регистрации и обязательны для прохождения KYC.
 - `month_sum_limit` задает месячный лимит суммы сделок пользователя (по умолчанию 200 000.00).
 - `two_factor_secret` хранит 32-символьный Base32 секрет TOTP.
 - `is_two_factor_enabled` активирует двухфакторную аутентификацию при входе.
