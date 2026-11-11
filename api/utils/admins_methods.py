@@ -563,6 +563,7 @@ async def close_order_to_performer(
                     .where(Order.id == order_id)
                     .values(
                         arbitration_reason=reason,
+                        completed_at=func.now(),
                         **order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value),
                     )
                 )

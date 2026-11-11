@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 
 from api.enums.enums_v1 import UserRoles
 from api.payments.payments_methods import generate_withdrow_link
@@ -73,7 +73,7 @@ async def deal_conflict(
 @router.get("/deal_payout_link")
 async def deal_payout_link(
     order_id: int,
-    performer_email: str | None = None,
+    performer_email: str | None = Query(None, max_length=100),
     authorized_user_id: int = Depends(authorize_active_user),
 ) -> dict[str, str]:
     operation_id = await get_or_create_order_payout_operation_id(

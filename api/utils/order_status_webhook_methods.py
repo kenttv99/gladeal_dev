@@ -388,6 +388,9 @@ def get_webhook_payout_completed_order_status(
         OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
     }:
         return status
+    # Если арбитр закрыл сделку в пользу исполнителя без email, она сначала
+    # ждёт выплаты в awaiting_performer_payout, а финальный статус выставляется
+    # после успешного payout по сохранённой причине арбитража.
     if (
         status == OrderStates.AWAITING_PERFORMER_PAYOUT.value
         and arbitration_reason is not None

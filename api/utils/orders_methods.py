@@ -195,8 +195,6 @@ async def get_or_create_order_payout_operation_id(
     performer_email: str | None = None,
 ) -> int:
     """Возвращаем payout-операцию, регистрируя её при необходимости."""
-    normalized_email = normalize_performer_email(performer_email)
-
     async with AsyncSessionLocal() as session:
         async with session.begin():
             result = await session.execute(
@@ -254,7 +252,9 @@ async def get_or_create_order_payout_operation_id(
                 (OrderPaymentStates.AUTHORIZED, OrderPaymentStates.COMPLETED),
             )
 
-            email = normalized_email or normalize_performer_email(stored_performer_email)
+            email = normalize_performer_email(performer_email)
+            if not email:
+                email = normalize_performer_email(stored_performer_email)
             if not email:
                 raise PerformerEmailRequiredError()
 
