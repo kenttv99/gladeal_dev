@@ -518,7 +518,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 
 Параметры `GET /api/v1/admin/get_orders`:
 
-- `search` - поиск по названию сделки;
+- `search` - поиск по названию сделки или точному ID;
 - `status_category` - `active`, `dispute` или `completed`;
 - `status` - один или несколько статусов (`status=a&status=b`); `status` и `status_category` взаимоисключающие;
 - `user_id` - все сделки пользователя в роли заказчика или исполнителя;

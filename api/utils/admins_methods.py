@@ -257,7 +257,11 @@ async def get_orders(
             .replace("%", "\\%")
             .replace("_", "\\_")
         )
-        filters.append(Order.title.ilike(f"%{escaped_search}%", escape="\\"))
+        title_filter = Order.title.ilike(f"%{escaped_search}%", escape="\\")
+        if search_value.isdigit():
+            filters.append(or_(title_filter, Order.id == int(search_value)))
+        else:
+            filters.append(title_filter)
 
     if created_from is not None:
         filters.append(Order.created_at >= created_from)

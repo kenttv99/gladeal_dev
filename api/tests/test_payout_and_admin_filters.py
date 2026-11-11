@@ -512,6 +512,32 @@ class AdminGetOrdersFiltersTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn(" IN ", statement)
         self.assertIn(" OR ", statement)
 
+    @patch("api.utils.admins_methods.AsyncSessionLocal")
+    async def test_admin_orders_search_by_id(self, mock_session_local):
+        now = datetime.now(timezone.utc)
+        order = SimpleNamespace(
+            id=123,
+            client_id=2,
+            performer_id=3,
+            status=OrderStates.AWAITING_PERFORMER,
+            title="Test deal",
+            created_at=now,
+            expire_in=now + timedelta(hours=2),
+            completed_at=None,
+        )
+        session = FakeSession(row_results=[[order]])
+        mock_session_local.return_value = session
+
+        response = await admins_methods.get_orders(
+            orders_limit=20,
+            search="123",
+        )
+
+        self.assertEqual(response.items[0].order_id, 123)
+        statement = str(session.statements[0])
+        self.assertIn("orders.id = ", statement)
+        self.assertIn("LIKE", statement)
+
     async def test_admin_orders_reject_status_and_category_together(self):
         with self.assertRaises(ValidationError):
             await admins_methods.get_orders(
