@@ -57,7 +57,7 @@ class ExpiredPayoutOrderData:
     current_status: OrderStates | str | None
     paygine_payment_operation_id: int
     performer_id: int
-    performer_email: str
+    performer_email: str | None
     performer_phone: str
     price: Decimal
     title: str
@@ -188,6 +188,14 @@ async def expire_confirmed_order(session: AsyncSession, order_id: int) -> None:
                     updated_at=func.now(),
                 )
             )
+
+        if not order_data.performer_email:
+            await set_expired_order_awaiting_payout_status(
+                session,
+                order_id,
+                order_data.current_status,
+            )
+            return
 
         payout_result = await register_payout_deal(
             RegisterPayoutDealPaymentRequest(
@@ -386,7 +394,7 @@ async def get_expired_payout_order_data(
     ) = row
     if order_status_value(current_status) != OrderStates.AWAITING_CLIENT_CONFIRMATION.value:
         raise ValidationError()
-    if performer_id is None or performer_phone is None or not performer_email:
+    if performer_id is None or performer_phone is None:
         raise ValidationError()
     if payment_operation_id is None or payout_operation_id is not None:
         raise OrderNotFoundError()
@@ -420,6 +428,30 @@ async def set_expired_order_refund_status(
         None,
         refund_operation_id,
         comment=comment,
+    )
+
+
+async def set_expired_order_awaiting_payout_status(
+    session: AsyncSession,
+    order_id: int,
+    current_status: OrderStates | str | None,
+) -> None:
+    """Автоподтверждаем сделку, но откладываем выплату до ввода email."""
+    await session.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(**order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value))
+    )
+    await add_order_status_history(
+        session,
+        order_id,
+        current_status,
+        OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+        None,
+        comment=(
+            "Автоматическое подтверждение по истечении 72 часов: "
+            "выплата ожидает ввода email исполнителем"
+        ),
     )
 
 

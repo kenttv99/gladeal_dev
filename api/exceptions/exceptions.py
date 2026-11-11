@@ -77,6 +77,11 @@ class PerformerEmailRequiredError(BaseAPIException):
     error_code = "PERFORMER_EMAIL_REQUIRED"
 
 
+class OrderExpiredError(BaseAPIException):
+    status_code = 409
+    error_code = "ORDER_EXPIRED"
+
+
 class InvalidCredentialsError(BaseAPIException):
     status_code = 401
     error_code = "INVALID_CREDENTIALS"

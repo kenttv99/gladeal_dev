@@ -11,6 +11,7 @@
   "ORDER_ALREADY_ACCEPTED": "Order cannot be declined because it has already been accepted by a performer.",
   "ORDER_SELF_EXECUTION_FORBIDDEN": "A user cannot perform their own order.",
   "PERFORMER_EMAIL_REQUIRED": "Performer email is required.",
+  "ORDER_EXPIRED": "The order completion deadline has expired.",
   "INVALID_CREDENTIALS": "Invalid authorization credentials.",
   "INVALID_ACCESS_TOKEN": "Invalid access token.",
   "ACCESS_TOKEN_EXPIRED": "Access token has expired.",

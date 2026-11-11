@@ -5,7 +5,12 @@ from datetime import datetime
 from sqlalchemy import and_, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
-from api.enums.enums_v1 import AdminRoles, OrderPaymentStates, OrderStates
+from api.enums.enums_v1 import (
+    AdminOrderStatusCategories,
+    AdminRoles,
+    OrderPaymentStates,
+    OrderStates,
+)
 from api.exceptions import (
     InvalidCredentialsError,
     OrderNotFoundError,
@@ -50,9 +55,12 @@ from api.utils.two_factor_methods import (
     verify_totp_code,
 )
 from api.utils.help_orders_method import (
+    ACTIVE_ORDER_STATUSES,
+    CLOSED_ORDER_STATUSES,
     add_order_status_history,
     ensure_order_payment_status,
     ensure_order_status,
+    normalize_performer_email,
     order_status_values,
 )
 from api.utils.admin_password_methods import (
@@ -64,6 +72,19 @@ from database.config import AsyncSessionLocal
 from database.models.orders import Order, OrderStatusHistory
 from database.models.payments import OrderPaymentData
 from database.models.users import Admin, User
+
+
+DISPUTE_ORDER_STATUSES = (
+    OrderStates.AWAITING_CONFLICT.value,
+    OrderStates.OPEN_CONFLICT.value,
+)
+ORDER_STATUS_CATEGORIES = {
+    AdminOrderStatusCategories.ACTIVE.value: tuple(
+        status for status in ACTIVE_ORDER_STATUSES if status not in DISPUTE_ORDER_STATUSES
+    ),
+    AdminOrderStatusCategories.DISPUTE.value: DISPUTE_ORDER_STATUSES,
+    AdminOrderStatusCategories.COMPLETED.value: CLOSED_ORDER_STATUSES,
+}
 
 
 def _parse_role(value: str) -> AdminRoles:
@@ -183,13 +204,16 @@ async def get_orders(
     orders_cursor_id: int | None = None,
     client_id: int | None = None,
     performer_id: int | None = None,
-    status: OrderStates | str | None = None,
+    user_id: int | None = None,
+    status: list[OrderStates | str] | None = None,
+    status_category: AdminOrderStatusCategories | str | None = None,
+    search: str | None = None,
     created_from: datetime | None = None,
     created_to: datetime | None = None,
     completed_from: datetime | None = None,
     completed_to: datetime | None = None,
 ) -> AdminOrdersResponse:
-    """Получаем страницу сделок с фильтрацией по пользователям, статусу и датам."""
+    """Получаем страницу сделок с серверной фильтрацией и поиском."""
     if (orders_cursor_created_at is None) != (orders_cursor_id is None):
         raise ValidationError()
     if created_from is not None and created_to is not None and created_from > created_to:
@@ -197,22 +221,54 @@ async def get_orders(
     if completed_from is not None and completed_to is not None and completed_from > completed_to:
         raise ValidationError()
 
-    status_value = status.value if isinstance(status, OrderStates) else status
-    filters = (
-        (Order.client_id == client_id,) if client_id is not None else ()
-    ) + (
-        (Order.performer_id == performer_id,) if performer_id is not None else ()
-    ) + (
-        (Order.status == status_value,) if status_value is not None else ()
-    ) + (
-        (Order.created_at >= created_from,) if created_from is not None else ()
-    ) + (
-        (Order.created_at <= created_to,) if created_to is not None else ()
-    ) + (
-        (Order.completed_at >= completed_from,) if completed_from is not None else ()
-    ) + (
-        (Order.completed_at <= completed_to,) if completed_to is not None else ()
+    if status is not None and not isinstance(status, (list, tuple, set)):
+        status = [status]
+    status_values = tuple(
+        item.value if isinstance(item, OrderStates) else item for item in (status or ())
     )
+    status_category_value = (
+        status_category.value
+        if isinstance(status_category, AdminOrderStatusCategories)
+        else status_category
+    )
+    if status_category_value is not None and status_values:
+        raise ValidationError(
+            details={"status": "use either status or status_category, not both"}
+        )
+
+    filters: list[object] = []
+    if client_id is not None:
+        filters.append(Order.client_id == client_id)
+    if performer_id is not None:
+        filters.append(Order.performer_id == performer_id)
+    if user_id is not None:
+        filters.append(or_(Order.client_id == user_id, Order.performer_id == user_id))
+    if status_values:
+        filters.append(Order.status.in_(status_values))
+    elif status_category_value is not None:
+        category_statuses = ORDER_STATUS_CATEGORIES.get(status_category_value)
+        if category_statuses is None:
+            raise ValidationError(details={"status_category": "unknown category"})
+        filters.append(Order.status.in_(category_statuses))
+
+    search_value = search.strip() if search else ""
+    if search_value:
+        escaped_search = (
+            search_value.replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        filters.append(Order.title.ilike(f"%{escaped_search}%", escape="\\"))
+
+    if created_from is not None:
+        filters.append(Order.created_at >= created_from)
+    if created_to is not None:
+        filters.append(Order.created_at <= created_to)
+    if completed_from is not None:
+        filters.append(Order.completed_at >= completed_from)
+    if completed_to is not None:
+        filters.append(Order.completed_at <= completed_to)
+
     cursor_filter = (
         (
             or_(
@@ -241,7 +297,9 @@ async def get_orders(
             client_id=order.client_id,
             performer_id=order.performer_id,
             status=order.status,
+            title=order.title,
             created_at=order.created_at,
+            expire_in=order.expire_in,
             completed_at=order.completed_at,
         )
         for order in orders
@@ -418,10 +476,16 @@ async def close_order_to_client(order_id: int, admin_id: int, reason: str) -> No
             )
 
 
-async def close_order_to_performer(order_id: int, admin_id: int, reason: str) -> None:
+async def close_order_to_performer(
+    order_id: int,
+    admin_id: int,
+    reason: str,
+    performer_email: str | None = None,
+) -> None:
     """Закрываем спор в пользу исполнителя и регистрируем выплату без комиссии."""
     if not reason or not reason.strip():
         raise ValidationError()
+    requested_performer_email = normalize_performer_email(performer_email)
     async with AsyncSessionLocal() as session:
         async with session.begin():
             result = await session.execute(
@@ -452,7 +516,7 @@ async def close_order_to_performer(order_id: int, admin_id: int, reason: str) ->
                 price,
                 title,
                 payment_status,
-                performer_email,
+                stored_performer_email,
                 payout_operation_id,
                 payout_status,
                 performer_phone,
@@ -470,8 +534,14 @@ async def close_order_to_performer(order_id: int, admin_id: int, reason: str) ->
             ):
                 raise OrderPaymentInvalidStatusError()
             ensure_no_active_payment_operation(payout_operation_id, payout_status)
-            if performer_id is None or performer_phone is None or not performer_email:
+            if performer_id is None or performer_phone is None:
                 raise ValidationError()
+            try:
+                email = requested_performer_email or normalize_performer_email(
+                    stored_performer_email
+                )
+            except ValidationError:
+                email = requested_performer_email
 
             if payment_status_val == OrderPaymentStates.AUTHORIZED.value:
                 if payment_operation_id is None:
@@ -487,11 +557,34 @@ async def close_order_to_performer(order_id: int, admin_id: int, reason: str) ->
                     )
                 )
 
+            if not email:
+                await session.execute(
+                    update(Order)
+                    .where(Order.id == order_id)
+                    .values(
+                        arbitration_reason=reason,
+                        **order_status_values(OrderStates.AWAITING_PERFORMER_PAYOUT.value),
+                    )
+                )
+                await add_order_status_history(
+                    session,
+                    order_id,
+                    current_status,
+                    OrderStates.AWAITING_PERFORMER_PAYOUT.value,
+                    None,
+                    comment=(
+                        "Закрыто арбитром в пользу исполнителя: "
+                        f"{reason}. Выплата ожидает ввода email исполнителем."
+                    ),
+                    changed_by_admin_id=admin_id,
+                )
+                return
+
             payout_result = await register_payout_deal(
                 RegisterPayoutDealPaymentRequest(
                     order_id=order_id,
                     performer_id=performer_id,
-                    performer_email=performer_email,
+                    performer_email=email,
                     performer_phone=performer_phone,
                     amount=price,
                     description=title,
@@ -518,6 +611,7 @@ async def close_order_to_performer(order_id: int, admin_id: int, reason: str) ->
                 update(OrderPaymentData)
                 .where(OrderPaymentData.order_id == order_id)
                 .values(
+                    performer_email=email,
                     paygine_payout_operation_id=(
                         payout_result.payment_values.paygine_payout_operation_id
                     ),

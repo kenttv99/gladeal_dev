@@ -48,6 +48,12 @@ class UserRoles(Enum):
     CLIENT = "client"
 
 
+class AdminOrderStatusCategories(Enum):
+    ACTIVE = "active"
+    DISPUTE = "dispute"
+    COMPLETED = "completed"
+
+
 class AdminRoles(Enum):
     SUPERUSER = "superuser"
     ADMIN = "admin"

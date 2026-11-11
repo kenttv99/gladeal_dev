@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import unittest
 
@@ -26,7 +26,7 @@ class OrderSchemasTest(unittest.TestCase):
             "title": "Minimal Deal",
             "customer_email": "client@example.com",
             "price": "5000.00",
-            "expire_in": now,
+            "expire_in": now + timedelta(hours=1),
             "violation_proof_requirements": "proof_1, proof_2",
         }
         req = CreateOrderRequest.model_validate(data)
@@ -48,7 +48,7 @@ class OrderSchemasTest(unittest.TestCase):
             "title": "Subscription Deal",
             "customer_email": "client@example.com",
             "price": "10000.00",
-            "expire_in": now,
+            "expire_in": now + timedelta(hours=1),
             "violation_proof_requirements": "screenshots, chat logs",
             "source_of_truth": "Service Admin Panel",
             "site_or_app": "https://example.com",

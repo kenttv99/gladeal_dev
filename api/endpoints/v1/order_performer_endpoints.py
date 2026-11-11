@@ -8,7 +8,7 @@ from api.schemas.schemas_v1 import (
 from api.utils.orders_methods import (
     approve_order,
     get_active_orders_by_role,
-    get_order_payout_operation_id,
+    get_or_create_order_payout_operation_id,
     get_performer_closed_orders,
     performer_confirm_order,
     performer_conflict_order,
@@ -73,9 +73,14 @@ async def deal_conflict(
 @router.get("/deal_payout_link")
 async def deal_payout_link(
     order_id: int,
+    performer_email: str | None = None,
     authorized_user_id: int = Depends(authorize_active_user),
 ) -> dict[str, str]:
-    operation_id = await get_order_payout_operation_id(order_id, authorized_user_id)
+    operation_id = await get_or_create_order_payout_operation_id(
+        order_id,
+        authorized_user_id,
+        performer_email,
+    )
     link = await generate_withdrow_link(operation_id)
     return {"link": link}
 

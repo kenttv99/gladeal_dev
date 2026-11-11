@@ -199,9 +199,9 @@ Refresh token-ы администраторов.
 - `paygine_payment_operation_id` и `paygine_payout_operation_id` уникальны.
 - `payment_status`, `payout_status`, `revoke_status` используют `OrderPaymentStates`.
 - `customer_email` заполняется при создании сделки.
-- `performer_email` заполняется при принятии сделки исполнителем.
+- `performer_email` nullable: может быть заполнен при принятии сделки, при выплате или при арбитражном закрытии в пользу исполнителя.
 - `paygine_payment_operation_id` создается при регистрации депозитной сделки.
-- `paygine_payout_operation_id` создается после подтверждения оплаты клиентом или при обработке просроченной сделки.
+- `paygine_payout_operation_id` создается при подтверждении оплаты клиентом (если email известен), при автоподтверждении с email или при запросе ссылки на выплату после ввода email.
 - `paygine_revoked_operation_id` используется для возвратных операций.
 - `expire_payment_at` и `expire_payout_at` хранят дедлайны Paygine-операций.
 - `payment_complete_at`, `payment_authorized_at`, `payout_completed_at` и `revoked_at` фиксируют фактическое время завершения или авторизации операций.

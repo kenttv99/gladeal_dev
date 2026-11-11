@@ -62,17 +62,14 @@
 - переводит сделку в `awaiting_client_payout`;
 - сохраняет `paygine_revoked_operation_id` и `revoke_status = registered`.
 
-*Примечание*: если заказчик оплатил сделку с задержкой более 3 часов с момента создания, дедлайн `expire_in` автоматически сдвигается при обработке вебхука оплаты на величину этой задержки, исключая ложную отмену сделки воркером сразу после оплаты.
+*Примечание*: если заказчик оплатил сделку с задержкой более 3 часов с момента создания, дедлайн `expire_in` автоматически сдвигается при обработке вебхука оплаты на величину этой задержки, исключая ложную отмену сделки воркером сразу после оплаты. Если после сдвига дедлайн всё равно оказался в прошлом, он устанавливается на `payment_at + исходная длительность задачи`, чтобы исполнитель получил полный срок на выполнение.
 
 ### 2. `awaiting_client_confirmation` (3 календарных дня молчания заказчика)
 Срок проверяется по полю `completed_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES` (4320 минут = 72 часа = 3 календарных дня, без разделения на рабочие и нерабочие дни).
 Если прошло 3 дня (`completed_at <= now - 72h`), воркер:
-- регистрирует payout через `register_payout_deal(...)`;
-- переводит сделку в `confirm_by_expire_time_to_performer`;
-- устанавливает `orders_payment_data.payment_status = completed`;
-- пишет `payment_complete_at`;
-- сохраняет `paygine_payout_operation_id`;
-- выставляет `payout_status = registered` и `expire_payout_at`.
+- выполняет `SDComplete`, если платёж ещё `AUTHORIZED`, и фиксирует `payment_status = completed`;
+- если `performer_email` известен — регистрирует payout через `register_payout_deal(...)`, переводит сделку в `confirm_by_expire_time_to_performer`, сохраняет `paygine_payout_operation_id`, `payout_status = registered` и `expire_payout_at`;
+- если `performer_email` неизвестен — не регистрирует payout, переводит сделку в `awaiting_performer_payout` и пишет в историю, что выплата ожидает ввода email; регистрация произойдёт при запросе `deal_payout_link`.
 
 ### 3. `awaiting_conflict` (3 календарных дня молчания исполнителя после отказа заказчика)
 Срок проверяется по полю `client_declined_at` и дельте `EXPIRE_TIME_TO_COMNFIRM_MINUTES` (4320 минут = 72 часа = 3 календарных дня).

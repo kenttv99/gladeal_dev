@@ -10,6 +10,7 @@ from api.exceptions import (
     OrderNotFoundError,
     OrderSelfExecutionForbiddenError,
     PerformerEmailRequiredError,
+    UserNotFoundError,
     ValidationError,
 )
 from api.payments.payments_methods import (
@@ -35,6 +36,8 @@ from api.utils.help_orders_method import (
     create_order_payment_data,
     create_order_record,
     delete_order_record,
+    ensure_order_not_expired,
+    ensure_order_payment_status,
     ensure_order_status,
     ensure_registered_order_payment_status,
     ensure_user_exists,
@@ -46,6 +49,7 @@ from api.utils.help_orders_method import (
     get_performer_decline_refund_data,
     get_softdecline_payment_operation_id,
     is_cancellation_within_hold_duration,
+    normalize_performer_email,
     order_status_value,
     order_status_values,
     set_client_refund_order_status,
@@ -58,6 +62,7 @@ from api.utils.help_orders_method import (
 from database.config import AsyncSessionLocal
 from database.models.orders import Order
 from database.models.payments import OrderPaymentData
+from database.models.users import User
 
 
 async def create_order(
@@ -165,6 +170,7 @@ async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
                 OrderPaymentData.payment_status,
                 Order.status,
                 Order.performer_id,
+                Order.expire_in,
             )
             .join(Order, Order.id == OrderPaymentData.order_id)
             .where(Order.id == order_id, Order.client_id == client_id)
@@ -172,31 +178,131 @@ async def get_order_payment_operation_id(order_id: int, client_id: int) -> int:
         row = result.one_or_none()
         if row is None or row[0] is None:
             raise OrderNotFoundError()
-        payment_op_id, payment_status, order_status, performer_id = row
+        payment_op_id, payment_status, order_status, performer_id, expire_in = row
         if (
             order_status_value(order_status) != OrderStates.AWAITING_PAYMENT.value
             or performer_id is None
         ):
             raise ValidationError()
+        ensure_order_not_expired(expire_in)
         ensure_registered_order_payment_status(payment_status)
         return int(payment_op_id)
 
 
-async def get_order_payout_operation_id(order_id: int, performer_id: int) -> int:
+async def get_or_create_order_payout_operation_id(
+    order_id: int,
+    performer_id: int,
+    performer_email: str | None = None,
+) -> int:
+    """Возвращаем payout-операцию, регистрируя её при необходимости."""
+    normalized_email = normalize_performer_email(performer_email)
+
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(
-                OrderPaymentData.paygine_payout_operation_id,
-                OrderPaymentData.payout_status,
+        async with session.begin():
+            result = await session.execute(
+                select(
+                    Order.status,
+                    Order.price,
+                    Order.title,
+                    OrderPaymentData.id,
+                    OrderPaymentData.performer_email,
+                    OrderPaymentData.paygine_payment_operation_id,
+                    OrderPaymentData.payment_status,
+                    OrderPaymentData.paygine_payout_operation_id,
+                    OrderPaymentData.payout_status,
+                    User.phone_number,
+                )
+                .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
+                .join(User, User.id == Order.performer_id)
+                .where(Order.id == order_id, Order.performer_id == performer_id)
+                .with_for_update(of=(Order, OrderPaymentData))
             )
-            .join(Order, Order.id == OrderPaymentData.order_id)
-            .where(Order.id == order_id, Order.performer_id == performer_id)
-        )
-        row = result.one_or_none()
-        if row is None or row[0] is None:
-            raise OrderNotFoundError()
-        ensure_registered_order_payment_status(row[1])
-        return int(row[0])
+            row = result.one_or_none()
+            if row is None:
+                raise OrderNotFoundError()
+
+            (
+                order_status,
+                price,
+                title,
+                payment_data_id,
+                stored_performer_email,
+                payment_operation_id,
+                payment_status,
+                payout_operation_id,
+                payout_status,
+                performer_phone,
+            ) = row
+
+            if payout_operation_id is not None:
+                ensure_registered_order_payment_status(payout_status)
+                return int(payout_operation_id)
+
+            ensure_order_status(
+                order_status,
+                (
+                    OrderStates.AWAITING_PERFORMER_PAYOUT,
+                    OrderStates.CONFIRM_BY_EXPIRE_TIME_TO_PERFORMER,
+                ),
+            )
+            if payment_operation_id is None:
+                raise OrderNotFoundError()
+            if performer_phone is None:
+                raise UserNotFoundError()
+            ensure_order_payment_status(
+                payment_status,
+                (OrderPaymentStates.AUTHORIZED, OrderPaymentStates.COMPLETED),
+            )
+
+            email = normalized_email or normalize_performer_email(stored_performer_email)
+            if not email:
+                raise PerformerEmailRequiredError()
+
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.id == payment_data_id)
+                .values(performer_email=email)
+            )
+
+            payment_status_value = (
+                payment_status.value
+                if isinstance(payment_status, OrderPaymentStates)
+                else payment_status
+            )
+            if payment_status_value == OrderPaymentStates.AUTHORIZED.value:
+                await complete_paymented_deal(int(payment_operation_id))
+                await session.execute(
+                    update(OrderPaymentData)
+                    .where(OrderPaymentData.id == payment_data_id)
+                    .values(
+                        payment_status=OrderPaymentStates.COMPLETED.value,
+                        payment_complete_at=func.now(),
+                        updated_at=func.now(),
+                    )
+                )
+
+            payout_result = await register_payout_deal(
+                RegisterPayoutDealPaymentRequest(
+                    order_id=order_id,
+                    performer_id=performer_id,
+                    performer_email=email,
+                    performer_phone=performer_phone,
+                    amount=price,
+                    description=title,
+                )
+            )
+            payout_operation_id = payout_result.payment_values.paygine_payout_operation_id
+            await session.execute(
+                update(OrderPaymentData)
+                .where(OrderPaymentData.id == payment_data_id)
+                .values(
+                    paygine_payout_operation_id=payout_operation_id,
+                    payout_status=OrderPaymentStates.REGISTERED.value,
+                    expire_payout_at=payout_result.payment_values.expire_payout_at,
+                    updated_at=func.now(),
+                )
+            )
+            return int(payout_operation_id)
 
 
 async def get_order_refund_operation_id(order_id: int, client_id: int) -> int:
@@ -279,23 +385,27 @@ async def approve_order(
     performer_id: int,
     performer_email: str | None,
 ) -> None:
-    """Переводим сделку в состояние ожидания оплаты"""
-    if not performer_email:
-        raise PerformerEmailRequiredError()
+    """Переводим сделку в состояние ожидания оплаты."""
+    performer_email = normalize_performer_email(performer_email)
 
     async with AsyncSessionLocal() as session:
         async with session.begin():
             await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
-                select(Order.status, Order.performer_id, Order.client_id)
+                select(
+                    Order.status,
+                    Order.performer_id,
+                    Order.client_id,
+                    Order.expire_in,
+                )
                 .where(Order.id == order_id)
                 .with_for_update()
             )
             order_row = order_data.one_or_none()
             if order_row is None:
                 raise OrderNotFoundError()
-            current_status, current_performer_id, client_id = order_row
+            current_status, current_performer_id, client_id, expire_in = order_row
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
             current_status_value = order_status_value(current_status)
@@ -304,6 +414,7 @@ async def approve_order(
                 or current_status_value != OrderStates.AWAITING_PERFORMER.value
             ):
                 raise OrderAlreadyAcceptedError()
+            ensure_order_not_expired(expire_in)
 
             await session.execute(
                 update(Order)
@@ -338,17 +449,18 @@ async def performer_confirm_order(order_id: int, performer_id: int) -> None:
             await ensure_user_exists(session, performer_id)
 
             order_data = await session.execute(
-                select(Order.status, Order.client_id)
+                select(Order.status, Order.client_id, Order.expire_in)
                 .where(Order.id == order_id, Order.performer_id == performer_id)
                 .with_for_update()
             )
             order_row = order_data.one_or_none()
             if order_row is None:
                 raise OrderNotFoundError()
-            current_status, client_id = order_row
+            current_status, client_id, expire_in = order_row
             if client_id == performer_id:
                 raise OrderSelfExecutionForbiddenError()
             ensure_order_status(current_status, OrderStates.AWAITING_PERFORMER_CONFIRMATION)
+            ensure_order_not_expired(expire_in)
 
             await session.execute(
                 update(Order)
@@ -386,23 +498,36 @@ async def client_confirm_order(order_id: int, client_id: int) -> None:
                     )
                 )
 
-            payout_result = await register_payout_deal(
-                RegisterPayoutDealPaymentRequest(
-                    order_id=order_id,
-                    performer_id=payment_data.performer_id,
-                    performer_email=payment_data.performer_email,
-                    performer_phone=payment_data.performer_phone,
-                    amount=payment_data.price,
-                    description=payment_data.title,
+            try:
+                performer_email = normalize_performer_email(payment_data.performer_email)
+            except ValidationError:
+                performer_email = None
+
+            payout_operation_id: str | None = None
+            expire_payout_at: datetime | None = None
+            if performer_email:
+                payout_result = await register_payout_deal(
+                    RegisterPayoutDealPaymentRequest(
+                        order_id=order_id,
+                        performer_id=payment_data.performer_id,
+                        performer_email=performer_email,
+                        performer_phone=payment_data.performer_phone,
+                        amount=payment_data.price,
+                        description=payment_data.title,
+                    )
                 )
-            )
+                payout_operation_id = (
+                    payout_result.payment_values.paygine_payout_operation_id
+                )
+                expire_payout_at = payout_result.payment_values.expire_payout_at
+
             await set_client_confirmed_order_status(
                 session,
                 order_id,
                 payment_data.current_status,
                 client_id,
-                payout_result.payment_values.paygine_payout_operation_id,
-                payout_result.payment_values.expire_payout_at,
+                payout_operation_id,
+                expire_payout_at,
             )
 
 

@@ -531,7 +531,15 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_performer_confirm_order_rejects_awaiting_payment(self):
         session = FakeSession(
-            execute_results=[FakeResult((OrderStates.AWAITING_PAYMENT.value, 2))],
+            execute_results=[
+                FakeResult(
+                    (
+                        OrderStates.AWAITING_PAYMENT.value,
+                        2,
+                        datetime.now(timezone.utc) + timedelta(hours=1),
+                    )
+                )
+            ],
             scalar_results=[True],
         )
         with patch.object(orders_methods, "AsyncSessionLocal", return_value=session):
@@ -790,7 +798,13 @@ class OrderStatusSetterTest(unittest.IsolatedAsyncioTestCase):
 class GetOrderPaymentOperationIdGuardTest(unittest.IsolatedAsyncioTestCase):
     @patch("api.utils.orders_methods.AsyncSessionLocal")
     async def test_rejects_when_status_is_awaiting_performer(self, mock_session_local):
-        fake_row = (12345, OrderPaymentStates.REGISTERED.value, OrderStates.AWAITING_PERFORMER.value, None)
+        fake_row = (
+            12345,
+            OrderPaymentStates.REGISTERED.value,
+            OrderStates.AWAITING_PERFORMER.value,
+            None,
+            datetime.now(timezone.utc) + timedelta(hours=1),
+        )
         mock_session_local.return_value = FakeSession(execute_results=[FakeResult(fake_row)])
 
         with self.assertRaises(ValidationError):
@@ -798,7 +812,13 @@ class GetOrderPaymentOperationIdGuardTest(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.utils.orders_methods.AsyncSessionLocal")
     async def test_rejects_when_performer_id_is_none(self, mock_session_local):
-        fake_row = (12345, OrderPaymentStates.REGISTERED.value, OrderStates.AWAITING_PAYMENT.value, None)
+        fake_row = (
+            12345,
+            OrderPaymentStates.REGISTERED.value,
+            OrderStates.AWAITING_PAYMENT.value,
+            None,
+            datetime.now(timezone.utc) + timedelta(hours=1),
+        )
         mock_session_local.return_value = FakeSession(execute_results=[FakeResult(fake_row)])
 
         with self.assertRaises(ValidationError):
@@ -806,7 +826,13 @@ class GetOrderPaymentOperationIdGuardTest(unittest.IsolatedAsyncioTestCase):
 
     @patch("api.utils.orders_methods.AsyncSessionLocal")
     async def test_accepts_when_awaiting_payment_with_performer(self, mock_session_local):
-        fake_row = (12345, OrderPaymentStates.REGISTERED.value, OrderStates.AWAITING_PAYMENT.value, 20)
+        fake_row = (
+            12345,
+            OrderPaymentStates.REGISTERED.value,
+            OrderStates.AWAITING_PAYMENT.value,
+            20,
+            datetime.now(timezone.utc) + timedelta(hours=1),
+        )
         mock_session_local.return_value = FakeSession(execute_results=[FakeResult(fake_row)])
 
         op_id = await orders_methods.get_order_payment_operation_id(order_id=1, client_id=10)

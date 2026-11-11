@@ -446,7 +446,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
   - `title` (обязательное) - название сделки;
   - `customer_email` (обязательное) - email заказчика для платежных уведомлений;
   - `price` (обязательное) - сумма сделки в рублях;
-  - `expire_in` (обязательное) - дата и время дедлайна сделки (ISO 8601);
+  - `expire_in` (обязательное) - дата и время крайнего срока выполнения сделки исполнителем (ISO 8601);
   - `violation_proof_requirements` (обязательное) - требования к доказательствам нарушений (варианты flexbox через запятую + пользовательский ввод);
   - `source_of_truth` (опционально) - источник истины для разрешения споров;
   - `site_or_app` (опционально) - официальный сайт или приложение;
@@ -472,18 +472,18 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 Платежные эффекты клиентских endpoint-ов:
 
 - `deal_payment_link` использует `paygine_payment_operation_id` и строит ссылку на `SDPayInDebit`.
-- `deal_confirm` вызывает `SDComplete`, затем регистрирует payout-операцию для исполнителя и переводит сделку в `awaiting_performer_payout`.
+- `deal_confirm` вызывает `SDComplete`; если почта исполнителя уже известна, регистрирует payout и переводит сделку в `awaiting_performer_payout`, иначе переводит в `awaiting_performer_payout` без payout до ввода почты.
 - `deal_softdecline` вызывает `ChangeOrderStatus` с `EXPIRED` для неоплаченной сделки или регистрирует refund-операцию и переводит оплаченную сделку в `awaiting_client_payout`.
 - `deal_harddecline` не затрагивает Paygine и переводит сделку в конфликт.
 
 ## Performer endpoints
 
 - `GET /api/v1/performer/deals` - возвращает активные сделки исполнителя.
-- `POST /api/v1/performer/deal_approve` - назначает исполнителя и переводит сделку в `awaiting_payment`.
+- `POST /api/v1/performer/deal_approve` - назначает исполнителя и переводит сделку в `awaiting_payment`. `performer_email` необязателен: почта для выплаты указывается на шаге выплаты.
 - `POST /api/v1/performer/deal_confirm` - переводит сделку в `awaiting_client_confirmation`.
 - `POST /api/v1/performer/deal_decline` - отменяет неоплаченную сделку или регистрирует возврат и переводит сделку в `awaiting_client_payout`.
 - `POST /api/v1/performer/deal_conflict` - переводит сделку в `open_conflict`.
-- `GET /api/v1/performer/deal_payout_link` - возвращает signed Paygine URL для получения средств.
+- `GET /api/v1/performer/deal_payout_link` - возвращает signed Paygine URL для получения средств. Принимает необязательный `performer_email`; если payout ещё не зарегистрирован, сохраняет почту и регистрирует выплату.
 - `GET /api/v1/client/deal_refund_link` - возвращает signed Paygine URL для получения возврата заказчиком.
 - `GET /api/v1/performer/deals_archive` - возвращает закрытые сделки исполнителя.
 
@@ -493,9 +493,10 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 
 Платежные эффекты исполнительских endpoint-ов:
 
-- `deal_approve` сохраняет `performer_email` в `orders_payment_data` и переводит сделку в `awaiting_payment`.
+- `deal_approve`, если `performer_email` передан, сохраняет его в `orders_payment_data`; без почты сделка всё равно переходит в `awaiting_payment`.
+- `client_confirm` при наличии сохранённой почты сразу регистрирует payout; без почты переводит сделку в `awaiting_performer_payout` без payout.
+- `deal_payout_link` сохраняет `performer_email` (если передан) и, если payout ещё не создан, регистрирует его, после чего строит ссылку на `SDPayOutPage`.
 - `deal_decline` регистрирует возврат заказчику без сервисной комиссии, сохраняет `paygine_revoked_operation_id` и переводит сделку в `awaiting_client_payout`.
-- `deal_payout_link` использует `paygine_payout_operation_id` и строит ссылку на `SDPayOutPage`.
 - `deal_refund_link` использует `paygine_revoked_operation_id` и строит ссылку на `SDPayOutPage`.
 
 ## Admin endpoints
@@ -507,13 +508,24 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `POST /api/v1/admin/2fa/verify` - завершение входа администратора по `pre_auth_token` и коду (TOTP или backup).
 - `POST /api/v1/admin/2fa/disable` - отключение 2FA администратора (требует пароль и код).
 - `GET /api/v1/admin/2fa/status` - статус 2FA и остаток резервных кодов администратора.
-- `GET /api/v1/admin/orders` - постраничный список сделок с фильтрацией по пользователям, статусу и датам.
-- `GET /api/v1/admin/users` - постраничный список пользователей с агрегированной статистикой сделок.
-- `GET /api/v1/admin/order_info` - полная информация о сделке и история статусов.
+- `GET /api/v1/admin/get_orders` - постраничный список сделок с фильтрацией по пользователям, статусу, категории, названию и датам.
+- `GET /api/v1/admin/get_users` - постраничный список пользователей с агрегированной статистикой сделок.
+- `GET /api/v1/admin/get_order_info` - полная информация о сделке и история статусов.
 - `GET /api/v1/admin/get_balance` - получение баланса кубышки платформы.
 - `POST /api/v1/admin/ban_user` - блокировка пользователя с сохранением причины.
-- `POST /api/v1/admin/orders/{order_id}/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата. Требует обязательное тело `{"reason": "Причина решения арбитра"}`.
-- `POST /api/v1/admin/orders/{order_id}/close_to_performer` - закрытие спора в пользу исполнителя и регистрация выплаты. Требует обязательное тело `{"reason": "Причина решения арбитра"}`.
+- `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата. Требует обязательное тело `{"reason": "Причина решения арбитра"}`.
+- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя. Требует тело `{"reason": "Причина решения арбитра"}`. `performer_email` необязателен: если почты нет, сделка переходит в `awaiting_performer_payout`, и исполнитель указывает почту при получении ссылки на выплату.
+
+Параметры `GET /api/v1/admin/get_orders`:
+
+- `search` - поиск по названию сделки;
+- `status_category` - `active`, `dispute` или `completed`;
+- `status` - один или несколько статусов (`status=a&status=b`);
+- `user_id` - все сделки пользователя в роли заказчика или исполнителя;
+- `client_id`, `performer_id`, `created_from`, `created_to`, `completed_from`, `completed_to`;
+- `orders_limit` (1..100, по умолчанию 20) и курсоры `orders_cursor_created_at`, `orders_cursor_id`.
+
+В элементах списка отдаются `title` и `expire_in`.
 
 ## Платежный контур
 
@@ -526,8 +538,8 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 
 - `POST /api/v1/client/deal_create` - регистрация депозитной сделки.
 - `POST /api/v1/client/deal_confirm` - завершение платежа и регистрация payout.
-- `POST /api/v1/admin/orders/{order_id}/close_to_client` - закрытие спора в пользу заказчика и возврат средств (реверс при AUTHORIZED, выплата при COMPLETED) с фиксацией `reason`.
-- `POST /api/v1/admin/orders/{order_id}/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout (с завершением списания при AUTHORIZED) с фиксацией `reason`.
+- `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и возврат средств (реверс при AUTHORIZED, выплата при COMPLETED) с фиксацией `reason`.
+- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя и регистрация payout (с завершением списания при AUTHORIZED) с фиксацией `reason`.
 - `POST /v1/paygine/webhook_order_status` - синхронизация статусов операций Paygine с БД.
 
 ## Статусы сделок
@@ -575,9 +587,12 @@ Enum-значения сохраняются в БД через `.value`, в н�
 
 `{"success": true}`
 
-Ссылка на сделку возвращается в формате:
+Ссылки возвращаются в поле `link`:
 
 `{"link": "https://gladeal.ru/active_deal/{slug}"}`
+
+Это же поле используется в `deal_payment_link`, `deal_payout_link` и `deal_refund_link`.
+Если срок выполнения сделки истёк, возвращается `409 ORDER_EXPIRED`.
 
 Ошибки возвращаются через единую локализованную систему:
 

@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from api.enums.enums_v1 import (
     OrderStates,
@@ -10,6 +10,7 @@ from api.enums.enums_v1 import (
     VerificationMethods,
     VerificationScopes,
 )
+from api.utils.datetime_methods import ensure_utc
 
 
 ###
@@ -164,7 +165,9 @@ class AdminOrderResponse(BaseModel):
     client_id: int
     performer_id: int | None
     status: OrderStates
+    title: str
     created_at: datetime
+    expire_in: datetime
     completed_at: datetime | None
 
 
@@ -191,6 +194,11 @@ class AdminOrderStatusHistoryResponse(BaseModel):
 
 class AdminCloseDisputeRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=2000, description="Причина решения арбитра")
+    performer_email: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Email исполнителя для выплаты (используется только при close_to_performer)",
+    )
 
 
 class AdminOrderInfoResponse(BaseModel):
@@ -241,6 +249,14 @@ class CreateOrderRequest(BaseModel):
     contact_free_deal: str | None = None
     task_free_deal: str | None = None
     how_to_proove_free_deal: str | None = None
+
+    @field_validator("expire_in")
+    @classmethod
+    def validate_expire_in(cls, value: datetime) -> datetime:
+        normalized = ensure_utc(value)
+        if normalized <= datetime.now(timezone.utc):
+            raise ValueError("expire_in must be in the future")
+        return normalized
 
 
 class OrderInfoResponse(BaseModel):

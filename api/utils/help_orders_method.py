@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from secrets import token_urlsafe
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+import re
 
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from api.enums.enums_v1 import OrderPaymentStates, OrderStates, OrderTypes
 from api.exceptions import (
     MonthOrdersLimitExceededError,
     OrderAlreadyAcceptedError,
+    OrderExpiredError,
     OrderNotFoundError,
     OrderPaymentInvalidStatusError,
     OrderPriceLimitExceededError,
@@ -24,6 +26,7 @@ from api.exceptions import (
     UserVerificationRequiredError,
     ValidationError,
 )
+from api.utils.datetime_methods import ensure_utc
 from database.models.orders import Order, OrderStatusHistory
 from database.models.payments import OrderPaymentData
 from database.models.users import KYCData, User
@@ -61,7 +64,7 @@ UNPAID_ORDER_STATUSES = (
 class ClientConfirmPaymentData:
     current_status: OrderStates | str | None
     performer_id: int
-    performer_email: str
+    performer_email: str | None
     performer_phone: str
     price: Decimal
     title: str
@@ -141,6 +144,35 @@ def ensure_registered_order_payment_status(status: OrderPaymentStates | str | No
     ensure_order_payment_status(status, OrderPaymentStates.REGISTERED)
 
 
+def ensure_order_not_expired(expire_in: datetime | None) -> None:
+    """Не даём работать со сделкой после истечения срока выполнения."""
+    if expire_in is not None and ensure_utc(expire_in) <= datetime.now(timezone.utc):
+        raise OrderExpiredError()
+
+
+def ensure_expire_in_in_future(expire_in: datetime) -> datetime:
+    """Нормализуем дедлайн и проверяем, что он ещё не наступил."""
+    normalized = ensure_utc(expire_in)
+    if normalized <= datetime.now(timezone.utc):
+        raise ValidationError(details={"expire_in": "must be in the future"})
+    return normalized
+
+
+PERFORMER_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normalize_performer_email(email: str | None) -> str | None:
+    """Нормализуем и валидируем email исполнителя для выплаты."""
+    if email is None:
+        return None
+    normalized = email.strip().lower()
+    if not normalized:
+        return None
+    if len(normalized) > 100 or not PERFORMER_EMAIL_PATTERN.fullmatch(normalized):
+        raise ValidationError(details={"performer_email": "invalid email"})
+    return normalized
+
+
 def ensure_order_payment_status(
     status: OrderPaymentStates | str | None,
     expected_status: OrderPaymentStates | tuple[OrderPaymentStates, ...],
@@ -206,6 +238,7 @@ async def create_order_record(
     if customer is None:
         raise UserNotFoundError()
     customer_phone, user_month_sum_limit = customer
+    expire_in = ensure_expire_in_in_future(expire_in)
 
     await ensure_order_price_and_user_verified(session, client_id, price)
 
@@ -350,8 +383,6 @@ async def get_client_confirm_payment_data(
         raise ValidationError()
     if payment_operation_id is None:
         raise OrderNotFoundError()
-    if not performer_email:
-        raise ValidationError()
     if performer_phone is None:
         raise UserNotFoundError()
     ensure_order_payment_status(
@@ -375,8 +406,8 @@ async def set_client_confirmed_order_status(
     order_id: int,
     current_status: OrderStates | str | None,
     client_id: int,
-    payout_operation_id: str,
-    expire_payout_at: datetime,
+    payout_operation_id: str | None = None,
+    expire_payout_at: datetime | None = None,
 ) -> None:
     await session.execute(
         update(Order)
@@ -390,16 +421,22 @@ async def set_client_confirmed_order_status(
         OrderStates.AWAITING_PERFORMER_PAYOUT.value,
         client_id,
     )
+    payment_values: dict[str, object] = {
+        "payment_status": OrderPaymentStates.COMPLETED.value,
+        "payment_complete_at": func.now(),
+    }
+    if payout_operation_id is not None:
+        payment_values.update(
+            {
+                "paygine_payout_operation_id": payout_operation_id,
+                "payout_status": OrderPaymentStates.REGISTERED.value,
+                "expire_payout_at": expire_payout_at,
+            }
+        )
     await session.execute(
         update(OrderPaymentData)
         .where(OrderPaymentData.order_id == order_id)
-        .values(
-            payment_status=OrderPaymentStates.COMPLETED.value,
-            payment_complete_at=func.now(),
-            paygine_payout_operation_id=payout_operation_id,
-            payout_status=OrderPaymentStates.REGISTERED.value,
-            expire_payout_at=expire_payout_at,
-        )
+        .values(**payment_values)
     )
 
 

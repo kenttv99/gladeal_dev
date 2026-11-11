@@ -113,6 +113,8 @@
 - `email`
 - `phone`
 
+Если `performer_email` ещё не указан, payout-операция не регистрируется: сделка переходит в `awaiting_performer_payout`, а регистрация выполняется при запросе `GET /api/v1/performer/deal_payout_link` с `performer_email`.
+
 В `orders_payment_data` сохраняются:
 
 - `paygine_payout_operation_id`

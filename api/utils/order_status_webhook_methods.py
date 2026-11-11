@@ -14,6 +14,7 @@ from api.exceptions import (
 )
 from api.payments.auth_methods import is_valid_signature
 from api.payments.utils.xml_response_parser import parse_paygine_response, xml_leaf_values
+from api.utils.datetime_methods import ensure_utc
 from api.utils.help_orders_method import (
     add_order_status_history,
     order_status_value,
@@ -42,6 +43,7 @@ class WebhookOrderOperation:
     operation_type: WebhookOperationType
     created_at: datetime | None = None
     expire_in: datetime | None = None
+    arbitration_reason: str | None = None
 
 
 async def read_order_status_webhook_payload(request: Request) -> dict[str, object]:
@@ -114,6 +116,7 @@ async def get_webhook_order_operation(
             OrderPaymentData.paygine_revoked_operation_id,
             Order.created_at,
             Order.expire_in,
+            Order.arbitration_reason,
         )
         .join(OrderPaymentData, OrderPaymentData.order_id == Order.id)
         .where(Order.id == order_id)
@@ -134,6 +137,7 @@ async def get_webhook_order_operation(
         revoked_operation_id,
         created_at,
         expire_in,
+        arbitration_reason,
     ) = row
     return WebhookOrderOperation(
         order_id=order_id,
@@ -152,6 +156,7 @@ async def get_webhook_order_operation(
         ),
         created_at=created_at,
         expire_in=expire_in,
+        arbitration_reason=arbitration_reason,
     )
 
 
@@ -188,20 +193,28 @@ def calculate_delayed_order_expire_in(
     payment_at: datetime,
     grace_period_hours: int = PAYMENT_DELAY_GRACE_PERIOD_HOURS,
 ) -> datetime | None:
-    """Сдвигаем дедлайн сделки на задержку оплаты, если оплата произведена позже grace_period_hours."""
+    """Сдвигаем дедлайн сделки на задержку оплаты и не допускаем дедлайн в прошлом."""
     if created_at is None or current_expire_in is None:
         return current_expire_in
-    if payment_at.tzinfo is None and created_at.tzinfo is not None:
-        payment_at = payment_at.replace(tzinfo=timezone.utc)
-    elif payment_at.tzinfo is not None and created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+
+    created_at = ensure_utc(created_at)
+    current_expire_in = ensure_utc(current_expire_in)
+    payment_at = ensure_utc(payment_at)
 
     elapsed = payment_at - created_at
     threshold = timedelta(hours=grace_period_hours)
-    if elapsed > threshold:
-        delay = elapsed - threshold
-        return current_expire_in + delay
-    return current_expire_in
+    shifted_expire_in = (
+        current_expire_in + (elapsed - threshold)
+        if elapsed > threshold
+        else current_expire_in
+    )
+    if shifted_expire_in > payment_at:
+        return shifted_expire_in
+
+    task_duration = current_expire_in - created_at
+    if task_duration <= timedelta(0):
+        task_duration = timedelta(hours=1)
+    return payment_at + task_duration
 
 
 async def transition_order_to_performer_confirmation(
@@ -294,7 +307,10 @@ async def set_webhook_payout_completed(
     operation: WebhookOrderOperation,
 ) -> None:
     current_status = order_status_value(operation.order_status)
-    new_status = get_webhook_payout_completed_order_status(current_status)
+    new_status = get_webhook_payout_completed_order_status(
+        current_status,
+        operation.arbitration_reason,
+    )
     is_new_payout_completion = (
         payment_status_value(operation.payout_status) != OrderPaymentStates.COMPLETED.value
     )
@@ -364,6 +380,7 @@ async def set_webhook_refund_completed(
 
 def get_webhook_payout_completed_order_status(
     current_status: OrderStates | str | None,
+    arbitration_reason: str | None = None,
 ) -> str:
     status = order_status_value(current_status)
     if status in {
@@ -371,6 +388,11 @@ def get_webhook_payout_completed_order_status(
         OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value,
     }:
         return status
+    if (
+        status == OrderStates.AWAITING_PERFORMER_PAYOUT.value
+        and arbitration_reason is not None
+    ):
+        return OrderStates.CLOSED_BY_ARBITER_TO_PERFORMER.value
     return OrderStates.SUCCESSFUL_COMPLETION.value
 
 

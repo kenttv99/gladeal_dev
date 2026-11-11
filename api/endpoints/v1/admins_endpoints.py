@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Body, Depends, Query
 
-from api.enums.enums_v1 import OrderStates
+from api.enums.enums_v1 import AdminOrderStatusCategories, OrderStates
 from api.payments.payments_methods import get_balance as get_balance_method
 from api.schemas.schemas_v1 import (
     AdminCloseDisputeRequest,
@@ -62,7 +62,10 @@ async def get_orders(
     orders_cursor_id: int | None = Query(None, ge=1),
     client_id: int | None = Query(None, ge=1),
     performer_id: int | None = Query(None, ge=1),
-    status: OrderStates | None = None,
+    user_id: int | None = Query(None, ge=1),
+    status: list[OrderStates] | None = Query(None),
+    status_category: AdminOrderStatusCategories | None = None,
+    search: str | None = Query(None, max_length=500),
     created_from: datetime | None = None,
     created_to: datetime | None = None,
     completed_from: datetime | None = None,
@@ -76,7 +79,10 @@ async def get_orders(
         orders_cursor_id=orders_cursor_id,
         client_id=client_id,
         performer_id=performer_id,
+        user_id=user_id,
         status=status,
+        status_category=status_category,
+        search=search,
         created_from=created_from,
         created_to=created_to,
         completed_from=completed_from,
@@ -113,7 +119,12 @@ async def close_to_performer(
     order_id: int = Query(..., ge=1),
     authorized_admin_id: int = Depends(authorize_admin),
 ) -> dict[str, bool]:
-    await close_order_to_performer(order_id, authorized_admin_id, data.reason)
+    await close_order_to_performer(
+        order_id,
+        authorized_admin_id,
+        data.reason,
+        data.performer_email,
+    )
     return {"success": True}
 
 
