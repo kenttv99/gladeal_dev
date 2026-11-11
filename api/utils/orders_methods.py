@@ -52,7 +52,6 @@ from api.utils.help_orders_method import (
     normalize_performer_email,
     order_status_value,
     order_status_values,
-    set_client_refund_order_status,
     set_client_confirmed_order_status,
     set_performer_declined_order_status,
     set_reversed_order_status,

@@ -58,7 +58,6 @@ from api.utils.help_orders_method import (
     ACTIVE_ORDER_STATUSES,
     CLOSED_ORDER_STATUSES,
     add_order_status_history,
-    ensure_order_payment_status,
     ensure_order_status,
     normalize_performer_email,
     order_status_values,

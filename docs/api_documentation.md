@@ -483,7 +483,7 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `POST /api/v1/performer/deal_confirm` - переводит сделку в `awaiting_client_confirmation`.
 - `POST /api/v1/performer/deal_decline` - отменяет неоплаченную сделку или регистрирует возврат и переводит сделку в `awaiting_client_payout`.
 - `POST /api/v1/performer/deal_conflict` - переводит сделку в `open_conflict`.
-- `GET /api/v1/performer/deal_payout_link` - возвращает signed Paygine URL для получения средств. Принимает необязательный `performer_email`; если payout ещё не зарегистрирован, сохраняет почту и регистрирует выплату.
+- `GET /api/v1/performer/deal_payout_link` - возвращает signed Paygine URL для получения средств. Принимает необязательный `performer_email`; если payout ещё не зарегистрирован, сохраняет почту и регистрирует выплату. Если почты нет ни в запросе, ни в сделке — `422 PERFORMER_EMAIL_REQUIRED`.
 - `GET /api/v1/client/deal_refund_link` - возвращает signed Paygine URL для получения возврата заказчиком.
 - `GET /api/v1/performer/deals_archive` - возвращает закрытые сделки исполнителя.
 
@@ -514,18 +514,18 @@ Endpoint требует access token в HTTPBasic-авторизации. Он �
 - `GET /api/v1/admin/get_balance` - получение баланса кубышки платформы.
 - `POST /api/v1/admin/ban_user` - блокировка пользователя с сохранением причины.
 - `POST /api/v1/admin/close_to_client` - закрытие спора в пользу заказчика и регистрация возврата. Требует обязательное тело `{"reason": "Причина решения арбитра"}`.
-- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя. Требует тело `{"reason": "Причина решения арбитра"}`. `performer_email` необязателен: если почты нет, сделка переходит в `awaiting_performer_payout`, и исполнитель указывает почту при получении ссылки на выплату.
+- `POST /api/v1/admin/close_to_performer` - закрытие спора в пользу исполнителя. Требует тело `{"reason": "Причина решения арбитра"}`. `performer_email` необязателен: если почты нет, сделка переходит в `awaiting_performer_payout`, исполнитель указывает почту при получении ссылки на выплату, а после выплаты сделка получает `closed_by_arbiter_to_performer`.
 
 Параметры `GET /api/v1/admin/get_orders`:
 
 - `search` - поиск по названию сделки;
 - `status_category` - `active`, `dispute` или `completed`;
-- `status` - один или несколько статусов (`status=a&status=b`);
+- `status` - один или несколько статусов (`status=a&status=b`); `status` и `status_category` взаимоисключающие;
 - `user_id` - все сделки пользователя в роли заказчика или исполнителя;
 - `client_id`, `performer_id`, `created_from`, `created_to`, `completed_from`, `completed_to`;
 - `orders_limit` (1..100, по умолчанию 20) и курсоры `orders_cursor_created_at`, `orders_cursor_id`.
 
-В элементах списка отдаются `title` и `expire_in`.
+В элементах списка отдаются `title` и `expire_in` (`expire_in` — крайний срок выполнения задания исполнителем).
 
 ## Платежный контур
 

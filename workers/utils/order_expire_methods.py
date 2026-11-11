@@ -22,6 +22,7 @@ from api.utils.help_orders_method import (
     CLOSED_ORDER_STATUSES,
     add_order_status_history,
     ensure_order_payment_status,
+    normalize_performer_email,
     order_status_value,
     order_status_values,
     set_client_refund_order_status,
@@ -189,7 +190,12 @@ async def expire_confirmed_order(session: AsyncSession, order_id: int) -> None:
                 )
             )
 
-        if not order_data.performer_email:
+        try:
+            performer_email = normalize_performer_email(order_data.performer_email)
+        except ValidationError:
+            performer_email = None
+
+        if not performer_email:
             await set_expired_order_awaiting_payout_status(
                 session,
                 order_id,
@@ -201,7 +207,7 @@ async def expire_confirmed_order(session: AsyncSession, order_id: int) -> None:
             RegisterPayoutDealPaymentRequest(
                 order_id=order_id,
                 performer_id=order_data.performer_id,
-                performer_email=order_data.performer_email,
+                performer_email=performer_email,
                 performer_phone=order_data.performer_phone,
                 amount=order_data.price,
                 description=order_data.title,

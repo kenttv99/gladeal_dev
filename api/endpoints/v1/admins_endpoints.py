@@ -6,6 +6,7 @@ from api.enums.enums_v1 import AdminOrderStatusCategories, OrderStates
 from api.payments.payments_methods import get_balance as get_balance_method
 from api.schemas.schemas_v1 import (
     AdminCloseDisputeRequest,
+    AdminCloseToPerformerRequest,
     AdminOrderInfoResponse,
     AdminOrdersResponse,
     AdminUserBanResponse,
@@ -115,7 +116,7 @@ async def close_to_client(
 
 @router.post("/close_to_performer")
 async def close_to_performer(
-    data: AdminCloseDisputeRequest,
+    data: AdminCloseToPerformerRequest,
     order_id: int = Query(..., ge=1),
     authorized_admin_id: int = Depends(authorize_admin),
 ) -> dict[str, bool]:

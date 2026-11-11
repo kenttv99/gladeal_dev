@@ -36,7 +36,7 @@ async def deals(authorized_user_id: int = Depends(authorize_active_user)):
 @router.post("/deal_approve")
 async def deal_approve(
     order_id: int,
-    performer_email: str | None = Body(None, embed=True),
+    performer_email: str | None = Body(None, embed=True, max_length=100),
     authorized_user_id: int = Depends(authorize_active_user),
 ) -> dict[str, bool]:
     await approve_order(order_id, authorized_user_id, performer_email)

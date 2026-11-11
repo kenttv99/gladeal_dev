@@ -10,7 +10,12 @@ from pydantic import ValidationError as PydanticValidationError
 
 from api.enums.enums_v1 import AdminOrderStatusCategories, OrderPaymentStates, OrderStates
 from api.exceptions import OrderExpiredError, PerformerEmailRequiredError, ValidationError
-from api.schemas.schemas_v1 import CreateOrderRequest
+from api.schemas.schemas_v1 import (
+    AdminCloseDisputeRequest,
+    AdminCloseToPerformerRequest,
+    AdminOrderResponse,
+    CreateOrderRequest,
+)
 from api.utils import admins_methods, orders_methods
 from api.utils.order_status_webhook_methods import (
     calculate_delayed_order_expire_in,
@@ -69,6 +74,16 @@ class FakeSession:
 
 def future(hours: int = 1) -> datetime:
     return datetime.now(timezone.utc) + timedelta(hours=hours)
+
+
+class AdminSchemasContractTest(unittest.TestCase):
+    def test_close_to_client_does_not_expose_performer_email(self):
+        self.assertNotIn("performer_email", AdminCloseDisputeRequest.model_fields)
+        self.assertIn("performer_email", AdminCloseToPerformerRequest.model_fields)
+
+    def test_admin_order_item_has_title_and_expire_in(self):
+        self.assertIn("title", AdminOrderResponse.model_fields)
+        self.assertIn("expire_in", AdminOrderResponse.model_fields)
 
 
 class CreateOrderExpireInValidationTest(unittest.TestCase):
@@ -391,6 +406,46 @@ class WebhookArbiterPayoutStatusTest(unittest.TestCase):
             OrderStates.AWAITING_PERFORMER_PAYOUT.value,
         )
         self.assertEqual(status, OrderStates.SUCCESSFUL_COMPLETION.value)
+
+
+class WorkerEmailNormalizationTest(unittest.IsolatedAsyncioTestCase):
+    @patch(
+        "workers.utils.order_expire_methods.set_expired_order_payout_status",
+        new_callable=AsyncMock,
+    )
+    @patch("workers.utils.order_expire_methods.register_payout_deal", new_callable=AsyncMock)
+    @patch(
+        "workers.utils.order_expire_methods.get_expired_payout_order_data",
+        new_callable=AsyncMock,
+    )
+    async def test_worker_normalizes_performer_email_before_payout(
+        self,
+        mock_get_data,
+        mock_register_payout,
+        mock_set_payout_status,
+    ):
+        mock_get_data.return_value = SimpleNamespace(
+            current_status=OrderStates.AWAITING_CLIENT_CONFIRMATION.value,
+            paygine_payment_operation_id=123,
+            performer_id=20,
+            performer_email=" Performer@Example.com ",
+            performer_phone="+79997654321",
+            price=Decimal("2500.00"),
+            title="Design logo",
+            payment_status=OrderPaymentStates.COMPLETED.value,
+        )
+        mock_register_payout.return_value = SimpleNamespace(
+            payment_values=SimpleNamespace(
+                paygine_payout_operation_id="777",
+                expire_payout_at=future(),
+            )
+        )
+
+        await expire_confirmed_order(FakeSession(), 1)
+
+        request = mock_register_payout.await_args.args[0]
+        self.assertEqual(request.performer_email, "performer@example.com")
+        mock_set_payout_status.assert_awaited_once()
 
 
 class WorkerWithoutEmailTest(unittest.IsolatedAsyncioTestCase):

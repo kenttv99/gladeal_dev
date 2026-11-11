@@ -206,16 +206,10 @@ class OrderStatusGuardServiceTest(unittest.IsolatedAsyncioTestCase):
                 ),
             ),
             patch.object(orders_methods, "refund_money", new=AsyncMock()) as refund,
-            patch.object(
-                orders_methods,
-                "set_client_refund_order_status",
-                new=AsyncMock(),
-            ) as set_status,
         ):
             await orders_methods.client_softdecline_order(1, 2)
 
         refund.assert_not_awaited()
-        set_status.assert_not_awaited()
 
     async def test_performer_decline_from_awaiting_payment(self):
         session = FakeSession()

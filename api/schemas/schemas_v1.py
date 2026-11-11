@@ -194,10 +194,13 @@ class AdminOrderStatusHistoryResponse(BaseModel):
 
 class AdminCloseDisputeRequest(BaseModel):
     reason: str = Field(..., min_length=1, max_length=2000, description="Причина решения арбитра")
+
+
+class AdminCloseToPerformerRequest(AdminCloseDisputeRequest):
     performer_email: str | None = Field(
         default=None,
         max_length=100,
-        description="Email исполнителя для выплаты (используется только при close_to_performer)",
+        description="Email исполнителя для выплаты",
     )
 
 
