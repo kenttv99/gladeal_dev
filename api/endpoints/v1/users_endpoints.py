@@ -15,6 +15,7 @@ from api.schemas.schemas_v1 import (
     TwoFactorSetupResponse,
     TwoFactorStatusResponse,
     TwoFactorVerifyRequest,
+    UserInfoResponse,
     UserKYCResponse,
     UserKYCVerifyRequest,
 )
@@ -43,6 +44,7 @@ from api.utils.users_methods import (
     enable_user_2fa,
     ensure_phone_number_available,
     get_user_2fa_status,
+    get_user_info as get_user_info_method,
     get_user_kyc_data,
     is_user_2fa_enabled,
     register_user,
@@ -293,5 +295,13 @@ async def kyc_status(
 ) -> UserKYCResponse:
     """Возвращает текущий статус KYC идентификации пользователя."""
     return await get_user_kyc_data(authorized_user_id)
+
+
+@router.get("/info", response_model=UserInfoResponse)
+async def user_info(
+    authorized_user_id: int = Depends(authorize_user),
+) -> UserInfoResponse:
+    """Возвращает полную информацию о пользователе для личного кабинета."""
+    return await get_user_info_method(authorized_user_id)
 
 

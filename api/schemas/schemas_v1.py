@@ -124,6 +124,34 @@ class UserKYCResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+class UserInfoResponse(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+
+    id: int
+    role: UserRoles
+    last_name: str | None = None
+    first_name: str | None = None
+    patronymic: str | None = None
+    phone_number: str
+    birth_date: datetime | None = None
+    persondoc_number: str | None = None
+    ppd: bool
+    month_sum_limit: Decimal
+    two_factor_enabled: bool
+    backup_codes_remaining: int
+    kyc_status: bool
+    kyc_level: str | None = None
+    kyc_updated_at: datetime | None = None
+    is_banned: bool
+    ban_reason: str | None = None
+    banned_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    successful_orders_count: int
+    unsuccessful_orders_count: int
+    conflict_orders_count: int
+
+
 class AdminUserResponse(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
 

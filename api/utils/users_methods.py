@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, exists, insert, or_, select, update
+from sqlalchemy import delete, exists, func, insert, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from api.enums.enums_v1 import OrderStates
@@ -19,6 +19,7 @@ from api.schemas.schemas_v1 import (
     AuthUserResponse,
     TwoFactorSetupResponse,
     TwoFactorStatusResponse,
+    UserInfoResponse,
     UserKYCResponse,
     UserKYCVerifyRequest,
 )
@@ -276,6 +277,56 @@ async def get_user_kyc_data(user_id: int) -> UserKYCResponse:
             kyc_status=bool(kyc_entry.kyc_status) if kyc_entry else False,
             kyc_level=kyc_entry.kyc_level if kyc_entry else None,
             updated_at=kyc_entry.updated_at if kyc_entry else None,
+        )
+
+
+async def get_user_info(user_id: int) -> UserInfoResponse:
+    """Возвращает полную информацию о пользователе для личного кабинета."""
+    async with AsyncSessionLocal() as session:
+        user = await session.scalar(select(User).where(User.id == user_id))
+        if user is None:
+            raise UserNotFoundError()
+
+        kyc_entry = await session.scalar(select(KYCData).where(KYCData.user_id == user_id))
+        counts_result = await session.execute(
+            select(
+                func.count(Order.id)
+                .filter(Order.status == OrderStates.SUCCESSFUL_COMPLETION.value)
+                .label("successful_orders_count"),
+                func.count(Order.id)
+                .filter(Order.status == OrderStates.UNSUCCESSFUL_COMPLETION.value)
+                .label("unsuccessful_orders_count"),
+                func.count(Order.id)
+                .filter(Order.status == OrderStates.OPEN_CONFLICT.value)
+                .label("conflict_orders_count"),
+            ).where(or_(Order.client_id == user_id, Order.performer_id == user_id))
+        )
+        successful_count, unsuccessful_count, conflict_count = counts_result.one()
+
+        return UserInfoResponse(
+            id=user.id,
+            role=user.role,
+            last_name=user.last_name,
+            first_name=user.first_name,
+            patronymic=user.patronymic,
+            phone_number=user.phone_number,
+            birth_date=user.birth_date,
+            persondoc_number=user.persondoc_number,
+            ppd=bool(user.ppd),
+            month_sum_limit=user.month_sum_limit,
+            two_factor_enabled=bool(user.is_two_factor_enabled),
+            backup_codes_remaining=len(user.two_factor_backup_codes or []),
+            kyc_status=bool(kyc_entry.kyc_status) if kyc_entry else False,
+            kyc_level=kyc_entry.kyc_level if kyc_entry else None,
+            kyc_updated_at=kyc_entry.updated_at if kyc_entry else None,
+            is_banned=bool(user.is_banned),
+            ban_reason=user.ban_reason,
+            banned_at=user.banned_at,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            successful_orders_count=successful_count,
+            unsuccessful_orders_count=unsuccessful_count,
+            conflict_orders_count=conflict_count,
         )
 
 
